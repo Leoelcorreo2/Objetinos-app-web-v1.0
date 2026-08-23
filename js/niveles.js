@@ -5,493 +5,83 @@
 
 
 /* ============================================================
-   ESTADO DEL GENERADOR
-   ============================================================ */
-
-const LEVEL_STATE = {
-
-    currentConfig: null,
-
-    scenario: "supermarket"
-
-};
-
-
-/* ============================================================
    OBTENER CONFIGURACIÓN DEL NIVEL
    ============================================================ */
 
-function getLevelConfig(
-    level
-) {
+function getLevelConfig(levelNumber) {
 
-    /*
-     * Si existe una configuración explícita,
-     * la utilizamos.
-     */
-
-    const exact =
+    return (
         CONFIG_NIVELES.find(
             config =>
-                config.nivel === level
-        );
-
-
-    if (exact) {
-
-        return {
-            ...exact
-        };
-
-    }
-
-
-    /*
-     * Para niveles superiores generamos
-     * una configuración progresiva.
-     */
-
-    const extra =
-        Math.max(
-            0,
-            level - 7
-        );
-
-
-    return {
-
-        nivel: level,
-
-        capas:
-            Math.min(
-                5,
-                3 +
-                Math.floor(
-                    extra / 3
-                )
-            ),
-
-        estantes:
-            Math.min(
-                12,
-                10 +
-                Math.floor(
-                    extra / 2
-                )
-            ),
-
-        estantesBloqueados:
-            Math.min(
-                4,
-                Math.floor(
-                    extra / 3
-                )
-            ),
-
-        desbloqueoTrio:
-            Math.min(
-                6,
-                4 +
-                Math.floor(
-                    extra / 3
-                )
-            ),
-
-        tiempo:
-            Math.min(
-                90,
-                45 +
-                Math.floor(
-                    extra / 2
-                )
-            )
-
-    };
-
-}
-
-
-/* ============================================================
-   ELEGIR ESCENARIO
-   ============================================================ */
-
-function chooseScenario(
-    level
-) {
-
-    const index =
-        (
-            level - 1
-        ) %
-        CONFIG.ESCENARIOS.length;
-
-
-    return CONFIG.ESCENARIOS[
-        index
-    ];
-
-}
-
-
-/* ============================================================
-   PREPARAR TABLERO HTML
-   ============================================================ */
-
-function prepareBoardElements(
-    numberOfCompartments
-) {
-
-    const cabinets =
-        document.getElementById(
-            "cabinets"
-        );
-
-
-    if (!cabinets) {
-        return [];
-    }
-
-
-    cabinets.innerHTML =
-        "";
-
-
-    /*
-     * Tres columnas visuales.
-     */
-
-    const columns = [
-
-        document.createElement(
-            "section"
-        ),
-
-        document.createElement(
-            "section"
-        ),
-
-        document.createElement(
-            "section"
+                config.nivel === levelNumber
         )
+        ||
+        CONFIG_NIVELES[
+            CONFIG_NIVELES.length - 1
+        ]
+    );
+}
 
+
+/* ============================================================
+   GENERAR LISTA DE OBJETOS
+   ============================================================ */
+
+function generateTripleList(
+    numberOfTriples
+) {
+
+    const availableTypes = [
+        ...TIPOS_OBJETOS
     ];
 
 
-    columns.forEach(
-        (
-            column,
-            index
-        ) => {
+    /*
+     * Mezclamos los tipos.
+     */
 
-            column.className =
-                "cabinet";
-
-
-            if (
-                index === 0
-            ) {
-
-                column.classList.add(
-                    "left"
-                );
-
-            }
-
-
-            if (
-                index === 1
-            ) {
-
-                column.classList.add(
-                    "center"
-                );
-
-            }
-
-
-            if (
-                index === 2
-            ) {
-
-                column.classList.add(
-                    "right"
-                );
-
-            }
-
-
-            cabinets.appendChild(
-                column
-            );
-
-        }
+    shuffleArray(
+        availableTypes
     );
 
 
-    /*
-     * Distribuimos los estantes entre
-     * las tres columnas.
-     */
-
-    const elements = [];
+    const result = [];
 
 
     for (
         let i = 0;
-        i < numberOfCompartments;
-        i++
-    ) {
-
-        const columnIndex =
-            i % 3;
-
-
-        const compartment =
-            createCompartmentElement();
-
-
-        columns[
-            columnIndex
-        ].appendChild(
-            compartment
-        );
-
-
-        elements.push(
-            compartment
-        );
-
-    }
-
-
-    return elements;
-
-}
-
-
-/* ============================================================
-   CREAR ELEMENTO DE ESTANTE
-   ============================================================ */
-
-function createCompartmentElement() {
-
-    const compartment =
-        document.createElement(
-            "div"
-        );
-
-
-    compartment.className =
-        "compartment";
-
-
-    const slotgrid =
-        document.createElement(
-            "div"
-        );
-
-
-    slotgrid.className =
-        "slotgrid";
-
-
-    for (
-        let i = 0;
-        i < CONFIG.HUECOS_POR_ESTANTE;
-        i++
-    ) {
-
-        const cell =
-            document.createElement(
-                "div"
-            );
-
-
-        cell.className =
-            "cell";
-
-
-        cell.dataset.pos =
-            i;
-
-
-        slotgrid.appendChild(
-            cell
-        );
-
-    }
-
-
-    compartment.appendChild(
-        slotgrid
-    );
-
-
-    return compartment;
-
-}
-
-
-/* ============================================================
-   CREAR COMPARTMENTS DEL MODELO
-   ============================================================ */
-
-function createCompartments(
-    elements,
-    levelConfig
-) {
-
-    const compartments = [];
-
-
-    elements.forEach(
-        (
-            element,
-            index
-        ) => {
-
-            const compartment =
-                new Compartment(
-                    element
-                );
-
-
-            /*
-             * Crear las capas.
-             */
-
-            for (
-                let layerIndex = 0;
-                layerIndex <
-                levelConfig.capas;
-                layerIndex++
-            ) {
-
-                compartment.addLayer();
-
-            }
-
-
-            /*
-             * Bloqueos.
-             */
-
-            if (
-                index <
-                levelConfig.estantesBloqueados
-            ) {
-
-                compartment.lock(
-                    levelConfig.desbloqueoTrio ||
-                    2
-                );
-
-            }
-
-
-            GAME_MODEL.addCompartment(
-                compartment
-            );
-
-
-            compartments.push(
-                compartment
-            );
-
-
-            compartment.updateLockedVisual();
-
-        }
-    );
-
-
-    return compartments;
-
-}
-
-
-/* ============================================================
-   GENERAR TIPOS DE OBJETOS
-   ============================================================ */
-
-/**
- * Crea una distribución solucionable.
- *
- * La regla fundamental es:
- *
- *     cada tipo aparece en grupos de 3
- *
- * evitando que un mismo objeto pertenezca
- * a varios tríos simultáneamente.
- */
-
-function generateObjectTypes(
-    totalObjects
-) {
-
-    const types = [];
-
-
-    /*
-     * El número total debe ser múltiplo de 3.
-     */
-
-    const groups =
-        Math.floor(
-            totalObjects / 3
-        );
-
-
-    /*
-     * Generamos una lista de tipos.
-     *
-     * Cada grupo representa exactamente
-     * un trío.
-     */
-
-    for (
-        let i = 0;
-        i < groups;
+        i < numberOfTriples;
         i++
     ) {
 
         const type =
-            TIPOS_OBJETOS[
-                i %
-                TIPOS_OBJETOS.length
+            availableTypes[
+                i % availableTypes.length
             ];
 
 
-        types.push(
+        /*
+         * Cada tipo aparece EXACTAMENTE
+         * tres veces.
+         */
+
+        result.push(
             type.id,
             type.id,
             type.id
         );
-
     }
 
 
-    /*
-     * Mezcla Fisher-Yates.
-     */
-
-    shuffleArray(
-        types
-    );
-
-
-    return types;
-
+    return result;
 }
 
 
 /* ============================================================
-   SHUFFLE
+   MEZCLAR ARRAY
    ============================================================ */
 
-function shuffleArray(
-    array
-) {
+function shuffleArray(array) {
 
     for (
         let i = array.length - 1;
@@ -509,310 +99,746 @@ function shuffleArray(
         [
             array[i],
             array[j]
-        ] = [
+        ] =
+        [
             array[j],
             array[i]
         ];
-
     }
 
 
     return array;
-
 }
 
 
 /* ============================================================
-   CONTAR HUECOS
+   CALCULAR POSICIONES
    ============================================================ */
 
-function countAvailableSlots(
-    compartments
+function calculateBoardCapacity(
+    numberOfShelves
 ) {
 
-    let total = 0;
+    return (
+        numberOfShelves *
+        CONFIG.HUECOS_POR_ESTANTE
+    );
+}
 
 
-    compartments.forEach(
-        compartment => {
+/* ============================================================
+   VALIDAR CONFIGURACIÓN MATEMÁTICA
+   ============================================================ */
 
-            /*
-             * El estante bloqueado inicialmente
-             * no recibe objetos.
-             */
+function validateLevelNumbers(
+    config
+) {
 
-            if (
-                compartment.locked
-            ) {
-                return;
-            }
+    const positions =
+        calculateBoardCapacity(
+            config.estantes
+        );
 
 
-            total +=
-                compartment.layers.length *
-                CONFIG.HUECOS_POR_ESTANTE;
+    const objects =
+        config.trios * 3;
 
+
+    const freeSlots =
+        positions - objects;
+
+
+    console.log(
+        `Nivel ${config.nivel}:`,
+        {
+            estantes: config.estantes,
+            posiciones: positions,
+            trios: config.trios,
+            objetos: objects,
+            huecosLibres: freeSlots
         }
     );
 
 
-    return total;
-
-}
-
-
-/* ============================================================
-   CREAR OBJETOS DEL NIVEL
-   ============================================================ */
-
-function populateLevel(
-    compartments,
-    levelConfig
-) {
-
     /*
-     * Determinamos cuántos huecos están
-     * realmente disponibles.
+     * No puede haber más objetos
+     * que posiciones.
      */
-
-    const availableSlots =
-        countAvailableSlots(
-            compartments
-        );
-
-
-    /*
-     * Siempre trabajamos con múltiplos
-     * de tres para garantizar tríos.
-     */
-
-    const usableSlots =
-        Math.floor(
-            availableSlots / 3
-        ) * 3;
-
 
     if (
-        usableSlots <= 0
+        objects > positions
     ) {
 
-        return;
-
+        return false;
     }
 
 
-    const types =
-        generateObjectTypes(
-            usableSlots
-        );
+    /*
+     * Necesitamos huecos libres.
+     */
 
+    if (
+        freeSlots <
+        CONFIG.MIN_HUECOS_LIBRES_INICIALES
+    ) {
 
-    let typeIndex = 0;
+        return false;
+    }
 
 
     /*
-     * Recorremos los estantes.
+     * El número de objetos debe
+     * ser múltiplo de 3.
      */
 
-    compartments.forEach(
-        compartment => {
+    if (
+        objects % 3 !== 0
+    ) {
 
-            /*
-             * Los bloqueados empiezan vacíos.
-             */
+        return false;
+    }
 
-            if (
-                compartment.locked
-            ) {
 
-                return;
+    return true;
+}
 
+
+/* ============================================================
+   COLOCAR TRÍOS DE FORMA SEGURA
+   ============================================================
+
+   La estrategia de esta primera versión es deliberadamente
+   conservadora.
+
+   Cada trío se coloca en dos posiciones de un estante
+   y una posición de otro.
+
+   Así siempre existe al menos un movimiento inicial que
+   permite completar un trío.
+
+   ============================================================ */
+
+function buildSolvableArrangement(
+    config
+) {
+
+    const positions =
+        [];
+
+
+    /*
+     * Crear todas las posiciones.
+     */
+
+    for (
+        let shelf = 0;
+        shelf < config.estantes;
+        shelf++
+    ) {
+
+        for (
+            let slot = 0;
+            slot < CONFIG.HUECOS_POR_ESTANTE;
+            slot++
+        ) {
+
+            positions.push({
+
+                shelf,
+                slot,
+
+                object: null
+            });
+        }
+    }
+
+
+    /*
+     * Generamos los tipos.
+     */
+
+    const triples =
+        generateTripleList(
+            config.trios
+        );
+
+
+    /*
+     * Para garantizar que el puzzle sea
+     * solucionable, primero creamos parejas.
+     *
+     * Ejemplo:
+     *
+     * Estante 0:
+     * [A][A][B]
+     *
+     * Estante 1:
+     * [A][B][B]
+     *
+     * Así A y B pueden eliminarse.
+     */
+
+
+    let positionIndex = 0;
+
+
+    for (
+        let i = 0;
+        i < triples.length;
+        i += 3
+    ) {
+
+        const type =
+            triples[i];
+
+
+        /*
+         * Buscar un estante con dos posiciones
+         * libres consecutivas.
+         */
+
+        let pairPositions =
+            findTwoFreePositions(
+                positions
+            );
+
+
+        if (
+            !pairPositions
+        ) {
+
+            return null;
+        }
+
+
+        pairPositions[0].object =
+            type;
+
+        pairPositions[1].object =
+            type;
+
+
+        /*
+         * El tercer objeto se coloca
+         * en otra posición libre.
+         */
+
+        const third =
+            findOneFreePosition(
+                positions,
+                pairPositions
+            );
+
+
+        if (
+            !third
+        ) {
+
+            return null;
+        }
+
+
+        third.object =
+            type;
+    }
+
+
+    /*
+     * Ahora mezclamos físicamente las posiciones.
+     *
+     * Los huecos permanecen huecos.
+     */
+
+    const occupied =
+        positions.filter(
+            position =>
+                position.object !== null
+        );
+
+
+    shuffleArray(
+        occupied
+    );
+
+
+    const shuffledObjects =
+        occupied.map(
+            position =>
+                position.object
+        );
+
+
+    for (
+        let i = 0;
+        i < occupied.length;
+        i++
+    ) {
+
+        occupied[i].object =
+            shuffledObjects[i];
+    }
+
+
+    return positions;
+}
+
+
+/* ============================================================
+   BUSCAR DOS POSICIONES LIBRES
+   ============================================================ */
+
+function findTwoFreePositions(
+    positions
+) {
+
+    /*
+     * Preferimos dos huecos del mismo estante.
+     */
+
+    for (
+        let shelf = 0;
+        shelf < 100;
+        shelf++
+    ) {
+
+        const free =
+            positions.filter(
+                position =>
+                    position.shelf === shelf &&
+                    position.object === null
+            );
+
+
+        if (
+            free.length >= 2
+        ) {
+
+            return [
+                free[0],
+                free[1]
+            ];
+        }
+
+
+        /*
+         * Si ya no quedan estantes,
+         * terminamos.
+         */
+
+        if (
+            !positions.some(
+                position =>
+                    position.shelf === shelf
+            )
+        ) {
+
+            break;
+        }
+    }
+
+
+    /*
+     * Como alternativa, cualquier dos
+     * posiciones libres.
+     */
+
+    const free =
+        positions.filter(
+            position =>
+                position.object === null
+        );
+
+
+    if (
+        free.length >= 2
+    ) {
+
+        return [
+            free[0],
+            free[1]
+        ];
+    }
+
+
+    return null;
+}
+
+
+/* ============================================================
+   BUSCAR UNA POSICIÓN LIBRE
+   ============================================================ */
+
+function findOneFreePosition(
+    positions,
+    excluded
+) {
+
+    return positions.find(
+        position =>
+            position.object === null &&
+            !excluded.includes(position)
+    ) || null;
+}
+
+
+/* ============================================================
+   VALIDACIÓN DEL TABLERO
+   ============================================================ */
+
+function validateGeneratedBoard(
+    positions
+) {
+
+    if (!positions) {
+
+        return false;
+    }
+
+
+    const objects =
+        positions.filter(
+            position =>
+                position.object !== null
+        );
+
+
+    const empty =
+        positions.filter(
+            position =>
+                position.object === null
+        );
+
+
+    /*
+     * Debe haber huecos.
+     */
+
+    if (
+        empty.length <
+        CONFIG.MIN_HUECOS_LIBRES_INICIALES
+    ) {
+
+        return false;
+    }
+
+
+    /*
+     * Cada tipo debe aparecer tres veces.
+     */
+
+    const counts = {};
+
+
+    objects.forEach(
+        position => {
+
+            const type =
+                position.object;
+
+
+            counts[type] =
+                (counts[type] || 0) + 1;
+        }
+    );
+
+
+    for (
+        const type in counts
+    ) {
+
+        if (
+            counts[type] % 3 !== 0
+        ) {
+
+            return false;
+        }
+    }
+
+
+    /*
+     * Debe existir al menos una pareja
+     * que permita iniciar una eliminación.
+     */
+
+    const hasPair =
+        positions.some(
+            position => {
+
+                if (
+                    position.object === null
+                ) {
+
+                    return false;
+                }
+
+
+                const shelf =
+                    position.shelf;
+
+
+                const same =
+                    positions.filter(
+                        other =>
+                            other.shelf === shelf &&
+                            other.object ===
+                                position.object
+                    );
+
+
+                return same.length >= 2;
             }
+        );
 
 
-            /*
-             * Cada capa.
+    if (!hasPair) {
 
-             */
+        return false;
+    }
 
-            compartment.layers
+
+    return true;
+}
+
+
+/* ============================================================
+   CREAR ESTANTES HTML
+   ============================================================ */
+
+function createCompartments(
+    number
+) {
+
+    const cabinets =
+        document.querySelectorAll(
+            ".cabinet"
+        );
+
+
+    const allCompartments =
+        [];
+
+
+    cabinets.forEach(
+        cabinet => {
+
+            cabinet
+                .querySelectorAll(
+                    ".compartment"
+                )
                 .forEach(
-                    layer => {
+                    compartment => {
 
-                        for (
-                            let slot = 0;
-                            slot <
-                            CONFIG.HUECOS_POR_ESTANTE;
-                            slot++
-                        ) {
-
-                            if (
-                                typeIndex >=
-                                types.length
-                            ) {
-
-                                return;
-
-                            }
-
-
-                            const object =
-                                createAndPlaceObject(
-                                    types[
-                                        typeIndex
-                                    ],
-                                    compartment,
-                                    layer.index,
-                                    slot
-                                );
-
-
-                            if (object) {
-
-                                typeIndex++;
-
-                            }
-
-                        }
-
+                        allCompartments.push(
+                            compartment
+                        );
                     }
                 );
-
         }
     );
 
 
     /*
-     * Actualizamos estado visual.
+     * Ocultamos todos inicialmente.
      */
 
-    updateAllObjectStates();
+    allCompartments.forEach(
+        element => {
 
-    renderAllObjects();
+            element.style.display =
+                "none";
 
+            element.innerHTML = `
+                <div class="slotgrid">
+                    <div class="cell"></div>
+                    <div class="cell"></div>
+                    <div class="cell"></div>
+                </div>
+            `;
+        }
+    );
+
+
+    const selected =
+        allCompartments.slice(
+            0,
+            number
+        );
+
+
+    selected.forEach(
+        element => {
+
+            element.style.display =
+                "block";
+        }
+    );
+
+
+    return selected;
 }
 
 
 /* ============================================================
-   CREAR NIVEL COMPLETO
+   CREAR NIVEL
    ============================================================ */
 
 function generateLevel(
-    level
+    levelNumber
 ) {
 
-    const levelConfig =
+    const config =
         getLevelConfig(
-            level
+            levelNumber
         );
 
 
-    LEVEL_STATE.currentConfig =
-        levelConfig;
+    console.log(
+        "Generando nivel:",
+        config
+    );
 
 
-    LEVEL_STATE.scenario =
-        levelConfig.escenario ||
-        chooseScenario(
-            level
+    if (
+        !validateLevelNumbers(
+            config
+        )
+    ) {
+
+        console.error(
+            "Configuración de nivel imposible:",
+            config
+        );
+
+        return false;
+    }
+
+
+    const arrangement =
+        buildSolvableArrangement(
+            config
         );
 
 
-    /*
-     * Limpiar modelo.
-     */
+    if (
+        !validateGeneratedBoard(
+            arrangement
+        )
+    ) {
+
+        console.error(
+            "El generador produjo un tablero inválido."
+        );
+
+        return false;
+    }
+
 
     GAME_MODEL.clear();
 
 
-    /*
-     * Preparar configuración del nivel.
-     */
-
-    const elements =
-        prepareBoardElements(
-            levelConfig.estantes
-        );
-
-
-    /*
-     * Crear estantes.
-     */
-
-    const compartments =
-        createCompartments(
-            elements,
-            levelConfig
-        );
-
-
-    /*
-     * Crear objetos.
-
-     */
-
-    populateLevel(
-        compartments,
-        levelConfig
-    );
-
-
-    /*
-     * Aplicar escenario.
-
-     */
-
-    applyScenario(
-        LEVEL_STATE.scenario
-    );
-
-
-    /*
-     * Refrescar UI.
-
-     */
-
-    refreshBoardUI();
-
-
-    return levelConfig;
-
-}
-
-
-/* ============================================================
-   PREPARAR NIVEL
-   ============================================================ */
-
-function prepareLevel(
-    level
-) {
-
-    const config =
-        generateLevel(
-            level
-        );
-
-
     GAME_MODEL.level =
-        level;
+        config.nivel;
 
 
     GAME_MODEL.remainingTime =
         config.tiempo;
 
 
-    GAME_MODEL.running =
-        false;
+    /*
+     * Crear estantes.
+     */
+
+    const elements =
+        createCompartments(
+            config.estantes
+        );
 
 
-    GAME_MODEL.gameOver =
-        false;
+    elements.forEach(
+        element => {
+
+            const compartment =
+                new Compartment(
+                    element
+                );
 
 
-    updateUI();
+            GAME_MODEL.addCompartment(
+                compartment
+            );
 
 
-    return config;
+            /*
+             * Primera capa.
+             */
 
+            compartment.ensureLayer(
+                0
+            );
+        }
+    );
+
+
+    /*
+     * Colocar objetos.
+     */
+
+    arrangement.forEach(
+        position => {
+
+            if (
+                position.object === null
+            ) {
+
+                return;
+            }
+
+
+            const compartment =
+                GAME_MODEL
+                    .compartments[
+                        position.shelf
+                    ];
+
+
+            createAndPlaceObject(
+                position.object,
+                compartment,
+                0,
+                position.slot
+            );
+        }
+    );
+
+
+    /*
+     * Actualizar visualización.
+     */
+
+    renderAllObjects();
+
+
+    /*
+     * Tema.
+     */
+
+    const scenarioIndex =
+        (
+            config.nivel - 1
+        ) %
+        CONFIG.ESCENARIOS.length;
+
+
+    document.body.dataset.theme =
+        CONFIG.ESCENARIOS[
+            scenarioIndex
+        ];
+
+
+    console.log(
+        "Nivel generado correctamente."
+    );
+
+
+    return true;
 }

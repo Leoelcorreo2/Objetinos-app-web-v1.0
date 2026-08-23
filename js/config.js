@@ -11,7 +11,9 @@ const CONFIG = {
 
     HUECOS_POR_ESTANTE: 3,
 
-    NUM_ESTANTES: 12,
+    MIN_HUECOS_LIBRES_INICIALES: 3,
+
+    TOLERANCIA_DROP: 0.65,
 
 
     /* --------------------------------------------------------
@@ -19,8 +21,6 @@ const CONFIG = {
        -------------------------------------------------------- */
 
     TIEMPO_INICIAL: 30,
-
-    TIEMPO_NIVEL_1: 30,
 
     TIEMPO_MINIMO: 10,
 
@@ -44,18 +44,6 @@ const CONFIG = {
 
     MULTIPLICADOR_COMBO: true,
 
-    MONEDAS_COMBO_BASE: 50,
-
-
-    /* --------------------------------------------------------
-       ARRASTRE
-       -------------------------------------------------------- */
-
-    // Distancia máxima desde el centro del hueco
-    // para considerar que el objeto ha sido colocado.
-
-    TOLERANCIA_DROP: 0.65,
-
 
     /* --------------------------------------------------------
        ANIMACIONES
@@ -73,8 +61,6 @@ const CONFIG = {
        -------------------------------------------------------- */
 
     PARTICULAS_TRIO: 12,
-
-    PARTICULAS_POR_COMBO: 12,
 
     PARTICULAS_MAXIMAS: 80,
 
@@ -106,19 +92,12 @@ const CONFIG = {
        -------------------------------------------------------- */
 
     ESCENARIOS: [
-
         "supermarket",
-
         "fridge",
-
         "toyshop",
-
         "library",
-
         "warehouse",
-
         "workshop"
-
     ]
 
 };
@@ -212,51 +191,33 @@ const TIPOS_OBJETOS = [
 const ESCENARIOS = {
 
     supermarket: {
-
         nombre: "Supermercado",
-
         emoji: "🛒"
-
     },
 
     fridge: {
-
         nombre: "Nevera",
-
         emoji: "🧊"
-
     },
 
     toyshop: {
-
         nombre: "Juguetería",
-
         emoji: "🧸"
-
     },
 
     library: {
-
         nombre: "Biblioteca",
-
         emoji: "📚"
-
     },
 
     warehouse: {
-
         nombre: "Almacén",
-
         emoji: "📦"
-
     },
 
     workshop: {
-
         nombre: "Taller",
-
         emoji: "🔧"
-
     }
 
 };
@@ -264,103 +225,84 @@ const ESCENARIOS = {
 
 /* ============================================================
    CONFIGURACIÓN DE NIVELES
+   ============================================================
+
+   IMPORTANTE:
+
+   objetos = tríos × 3
+
+   posiciones = estantes × 3
+
+   huecos libres = posiciones - objetos
+
+   Por tanto:
+
+   4 estantes / 3 tríos
+   12 posiciones / 9 objetos
+   = 3 huecos libres
+
+   5 estantes / 4 tríos
+   15 posiciones / 12 objetos
+   = 3 huecos libres
+
+   NUNCA generamos un nivel inicial completamente lleno.
    ============================================================ */
 
 const CONFIG_NIVELES = [
 
     {
         nivel: 1,
-
-        capas: 1,
-
         estantes: 4,
-
-        estantesBloqueados: 0,
-
+        capas: 1,
+        trios: 3,
         tiempo: 30
     },
-
 
     {
         nivel: 2,
-
+        estantes: 5,
         capas: 1,
-
-        estantes: 6,
-
-        estantesBloqueados: 0,
-
+        trios: 4,
         tiempo: 30
     },
 
-
     {
         nivel: 3,
-
-        capas: 2,
-
         estantes: 6,
-
-        estantesBloqueados: 0,
-
+        capas: 1,
+        trios: 5,
         tiempo: 35
     },
-
 
     {
         nivel: 4,
-
-        capas: 2,
-
-        estantes: 8,
-
-        estantesBloqueados: 0,
-
+        estantes: 6,
+        capas: 1,
+        trios: 5,
         tiempo: 35
     },
 
-
     {
         nivel: 5,
-
-        capas: 2,
-
-        estantes: 8,
-
-        estantesBloqueados: 1,
-
-        desbloqueoTrio: 2,
-
+        estantes: 7,
+        capas: 1,
+        trios: 6,
         tiempo: 40
     },
-
 
     {
         nivel: 6,
-
-        capas: 3,
-
-        estantes: 9,
-
-        estantesBloqueados: 1,
-
-        desbloqueoTrio: 3,
-
+        estantes: 8,
+        capas: 1,
+        trios: 7,
         tiempo: 40
     },
 
-
     {
         nivel: 7,
-
-        capas: 3,
-
-        estantes: 10,
-
-        estantesBloqueados: 2,
-
-        desbloqueoTrio: 4,
-
+        estantes: 8,
+        capas: 1,
+        trios: 7,
         tiempo: 45
     }
 

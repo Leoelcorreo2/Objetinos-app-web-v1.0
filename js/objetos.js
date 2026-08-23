@@ -4,22 +4,17 @@
    ============================================================ */
 
 
-/* ============================================================
-   OBTENER TIPO DE OBJETO
-   ============================================================ */
-
 function getObjectType(typeId) {
 
     return TIPOS_OBJETOS.find(
         type =>
             type.id === typeId
     );
-
 }
 
 
 /* ============================================================
-   CREAR GAME OBJECT
+   CREAR OBJETO
    ============================================================ */
 
 function createGameObject(typeId) {
@@ -36,7 +31,6 @@ function createGameObject(typeId) {
         );
 
         return null;
-
     }
 
 
@@ -50,12 +44,11 @@ function createGameObject(typeId) {
 
 
     return object;
-
 }
 
 
 /* ============================================================
-   CREAR OBJETO ALEATORIO
+   OBJETO ALEATORIO
    ============================================================ */
 
 function createRandomObject() {
@@ -70,12 +63,11 @@ function createRandomObject() {
     return createGameObject(
         TIPOS_OBJETOS[index].id
     );
-
 }
 
 
 /* ============================================================
-   COLOCAR OBJETO EN UNA CAPA
+   COLOCAR OBJETO
    ============================================================ */
 
 function placeObject(
@@ -91,7 +83,6 @@ function placeObject(
     ) {
 
         return false;
-
     }
 
 
@@ -100,7 +91,6 @@ function placeObject(
     ) {
 
         return false;
-
     }
 
 
@@ -118,29 +108,25 @@ function placeObject(
     ) {
 
         return false;
-
     }
 
 
     object.compartment =
         compartment;
 
-
     object.layer =
         layer;
-
 
     object.slot =
         slot;
 
 
     return true;
-
 }
 
 
 /* ============================================================
-   QUITAR OBJETO DE SU POSICIÓN
+   QUITAR OBJETO
    ============================================================ */
 
 function removeObjectFromBoard(
@@ -150,7 +136,6 @@ function removeObjectFromBoard(
     if (!object) {
 
         return null;
-
     }
 
 
@@ -162,7 +147,6 @@ function removeObjectFromBoard(
         object.layer.removeFrom(
             object.slot
         );
-
     }
 
 
@@ -174,38 +158,11 @@ function removeObjectFromBoard(
 
 
     return object;
-
 }
 
 
 /* ============================================================
-   ENCONTRAR OBJETO
-   ============================================================ */
-
-function findObject(
-    object
-) {
-
-    if (!object) {
-
-        return null;
-
-    }
-
-
-    return GAME_MODEL
-        .activeObjects()
-        .find(
-            item =>
-                item === object ||
-                item.id === object.id
-        ) || null;
-
-}
-
-
-/* ============================================================
-   OBTENER OBJETO DESDE ELEMENTO HTML
+   OBTENER OBJETO DESDE ELEMENTO
    ============================================================ */
 
 function objectFromElement(
@@ -215,7 +172,6 @@ function objectFromElement(
     if (!element) {
 
         return null;
-
     }
 
 
@@ -226,7 +182,6 @@ function objectFromElement(
     if (!id) {
 
         return null;
-
     }
 
 
@@ -236,7 +191,6 @@ function objectFromElement(
             object =>
                 object.id === id
         ) || null;
-
 }
 
 
@@ -247,13 +201,6 @@ function objectFromElement(
 function createObjectElement(
     object
 ) {
-
-    if (!object) {
-
-        return null;
-
-    }
-
 
     const element =
         document.createElement(
@@ -274,15 +221,8 @@ function createObjectElement(
 
 
     element.innerHTML = `
-
-        <span>
-            ${object.emoji}
-        </span>
-
-        <small>
-            ${object.nombre}
-        </small>
-
+        <span>${object.emoji}</span>
+        <small>${object.nombre}</small>
     `;
 
 
@@ -291,12 +231,11 @@ function createObjectElement(
 
 
     return element;
-
 }
 
 
 /* ============================================================
-   DETERMINAR SI UN OBJETO ES FRONTAL
+   ¿ES OBJETO DE LA CAPA FRONTAL?
    ============================================================ */
 
 function isObjectFront(
@@ -305,36 +244,24 @@ function isObjectFront(
 
     if (
         !object ||
-        !object.compartment
+        !object.compartment ||
+        !object.layer
     ) {
 
         return false;
-
-    }
-
-
-    const activeLayer =
-        object.compartment
-            .activeLayer();
-
-
-    if (!activeLayer) {
-
-        return false;
-
     }
 
 
     return (
-        object.layer ===
-        activeLayer
+        object.compartment
+            .activeLayer() ===
+        object.layer
     );
-
 }
 
 
 /* ============================================================
-   ACTUALIZAR CLASE VISUAL DEL OBJETO
+   ACTUALIZAR ESTADO VISUAL
    ============================================================ */
 
 function updateObjectVisualState(
@@ -347,67 +274,41 @@ function updateObjectVisualState(
     ) {
 
         return;
-
     }
 
 
-    const element =
-        object.element;
+    const front =
+        isObjectFront(
+            object
+        );
 
 
-    element.classList.remove(
+    object.element.classList.toggle(
         "front",
-        "back"
+        front
+    );
+
+
+    object.element.classList.toggle(
+        "back",
+        !front
     );
 
 
     if (
-        isObjectFront(object)
+        front &&
+        !object.compartment.locked
     ) {
 
-        element.classList.add(
-            "front"
-        );
-
-        element.style.pointerEvents =
-            object.compartment.locked
-                ? "none"
-                : "auto";
-
+        object.element.style.pointerEvents =
+            "auto";
     }
 
     else {
 
-        element.classList.add(
-            "back"
-        );
-
-        element.style.pointerEvents =
+        object.element.style.pointerEvents =
             "none";
-
     }
-
-}
-
-
-/* ============================================================
-   ACTUALIZAR TODOS LOS OBJETOS
-   ============================================================ */
-
-function updateAllObjectStates() {
-
-    GAME_MODEL
-        .activeObjects()
-        .forEach(
-            object => {
-
-                updateObjectVisualState(
-                    object
-                );
-
-            }
-        );
-
 }
 
 
@@ -422,57 +323,46 @@ function renderObject(
     if (
         !object ||
         !object.element ||
-        !object.compartment
+        !object.compartment ||
+        object.slot === null
     ) {
 
         return;
-
     }
-
-
-    const compartment =
-        object.compartment;
-
-
-    const element =
-        object.element;
 
 
     const cells =
-        compartment.element
+        object.compartment.element
             .querySelectorAll(
                 ".cell"
             );
-
-
-    if (
-        !cells ||
-        !cells[object.slot]
-    ) {
-
-        return;
-
-    }
 
 
     const cell =
         cells[object.slot];
 
 
-    if (
-        element.parentElement !== cell
-    ) {
+    if (!cell) {
 
-        cell.appendChild(
-            element
-        );
-
+        return;
     }
 
 
-    /* --------------------------------------------------------
-       CAPA
-       -------------------------------------------------------- */
+    if (
+        object.element.parentElement !== cell
+    ) {
+
+        cell.appendChild(
+            object.element
+        );
+    }
+
+
+    const front =
+        isObjectFront(
+            object
+        );
+
 
     const layerIndex =
         object.layer
@@ -480,68 +370,38 @@ function renderObject(
             : 0;
 
 
-    /* --------------------------------------------------------
-       PROFUNDIDAD VISUAL
-       -------------------------------------------------------- */
-
-    const isFront =
-        isObjectFront(
-            object
-        );
-
-
-    element.style.setProperty(
+    object.element.style.setProperty(
         "--z",
-        isFront
-            ? 20
+        front
+            ? 50
             : 10 - layerIndex
     );
 
 
-    /* --------------------------------------------------------
-       ALTURA
-       --------------------------------------------------------
-
-       Las capas posteriores se ven ligeramente
-       por encima/por detrás.
-
-       -------------------------------------------------------- */
-
-    const bottom =
-        isFront
-            ? 4
-            : 8 + (
-                layerIndex * 8
-            );
-
-
-    element.style.setProperty(
+    object.element.style.setProperty(
         "--bottom",
-        `${bottom}px`
+        front
+            ? "4px"
+            : `${8 + layerIndex * 8}px`
     );
 
 
-    /* --------------------------------------------------------
-       ESCALA
-       -------------------------------------------------------- */
-
-    element.style.setProperty(
+    object.element.style.setProperty(
         "--scale",
-        isFront
-            ? 1
-            : .88
+        front
+            ? "1"
+            : ".88"
     );
 
 
     updateObjectVisualState(
         object
     );
-
 }
 
 
 /* ============================================================
-   RENDERIZAR TODOS LOS OBJETOS
+   RENDERIZAR TODO
    ============================================================ */
 
 function renderAllObjects() {
@@ -549,81 +409,14 @@ function renderAllObjects() {
     GAME_MODEL
         .activeObjects()
         .forEach(
-            object => {
-
-                renderObject(
-                    object
-                );
-
-            }
+            object =>
+                renderObject(object)
         );
-
 }
 
 
 /* ============================================================
-   ANIMACIÓN DE APARICIÓN
-   ============================================================ */
-
-function animateObjectSpawn(
-    object
-) {
-
-    if (
-        !object ||
-        !object.element
-    ) {
-
-        return;
-
-    }
-
-
-    object.element
-        .classList
-        .remove(
-            "spawn"
-        );
-
-
-    // Forzar reflow para que la animación
-    // se pueda repetir.
-
-    void object.element.offsetWidth;
-
-
-    object.element
-        .classList
-        .add(
-            "spawn"
-        );
-
-
-    setTimeout(
-        () => {
-
-            if (
-                object.element
-            ) {
-
-                object.element
-                    .classList
-                    .remove(
-                        "spawn"
-                    );
-
-            }
-
-        },
-
-        CONFIG.DURACION_SPAWN
-    );
-
-}
-
-
-/* ============================================================
-   CREAR Y COLOCAR OBJETO
+   CREAR Y COLOCAR
    ============================================================ */
 
 function createAndPlaceObject(
@@ -642,26 +435,21 @@ function createAndPlaceObject(
     if (!object) {
 
         return null;
-
     }
 
 
-    const placed =
-        placeObject(
+    if (
+        !placeObject(
             object,
             compartment,
             layerIndex,
             slot
-        );
+        )
+    ) {
 
-
-    if (!placed) {
-
-        object.removed =
-            true;
+        object.removed = true;
 
         return null;
-
     }
 
 
@@ -681,12 +469,59 @@ function createAndPlaceObject(
 
 
     return object;
-
 }
 
 
 /* ============================================================
-   ELIMINAR OBJETO LÓGICAMENTE
+   ANIMACIÓN DE APARICIÓN
+   ============================================================ */
+
+function animateObjectSpawn(
+    object
+) {
+
+    if (
+        !object ||
+        !object.element
+    ) {
+
+        return;
+    }
+
+
+    object.element.classList.remove(
+        "spawn"
+    );
+
+
+    void object.element.offsetWidth;
+
+
+    object.element.classList.add(
+        "spawn"
+    );
+
+
+    setTimeout(
+        () => {
+
+            if (
+                object.element
+            ) {
+
+                object.element.classList.remove(
+                    "spawn"
+                );
+            }
+
+        },
+        CONFIG.DURACION_SPAWN
+    );
+}
+
+
+/* ============================================================
+   ELIMINAR OBJETO
    ============================================================ */
 
 function markObjectRemoved(
@@ -696,34 +531,28 @@ function markObjectRemoved(
     if (!object) {
 
         return;
-
     }
 
 
-    object.removed =
-        true;
+    object.removed = true;
 
 
     if (object.element) {
 
-        object.element
-            .classList
-            .add(
-                "removing"
-            );
-
+        object.element.classList.add(
+            "removing"
+        );
     }
 
 
     removeObjectFromBoard(
         object
     );
-
 }
 
 
 /* ============================================================
-   ELIMINAR TRÍO LÓGICAMENTE
+   ELIMINAR TRÍO
    ============================================================ */
 
 function removeTripleObjects(
@@ -736,18 +565,12 @@ function removeTripleObjects(
     ) {
 
         return;
-
     }
 
 
     objects.forEach(
-        object => {
-
-            markObjectRemoved(
-                object
-            );
-
-        }
+        object =>
+            markObjectRemoved(object)
     );
 
 
@@ -761,24 +584,19 @@ function removeTripleObjects(
                         object.element
                     ) {
 
-                        object.element
-                            .remove();
-
+                        object.element.remove();
                     }
-
                 }
             );
 
         },
-
         CONFIG.DURACION_ELIMINACION
     );
-
 }
 
 
 /* ============================================================
-   OBTENER LOS OBJETOS DE LA CAPA FRONTAL
+   OBJETOS DE LA CAPA FRONTAL
    ============================================================ */
 
 function getFrontObjects(
@@ -788,7 +606,6 @@ function getFrontObjects(
     if (!compartment) {
 
         return [];
-
     }
 
 
@@ -799,10 +616,8 @@ function getFrontObjects(
     if (!layer) {
 
         return [];
-
     }
 
 
     return layer.objects();
-
 }

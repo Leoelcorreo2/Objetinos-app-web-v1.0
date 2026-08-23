@@ -20,11 +20,6 @@ class GameObject {
                 .toString(36)
                 .substring(2, 9);
 
-
-        /* ----------------------------------------------------
-           TIPO
-           ---------------------------------------------------- */
-
         this.type = tipo.id;
 
         this.trioKey = tipo.id;
@@ -33,62 +28,25 @@ class GameObject {
 
         this.nombre = tipo.nombre;
 
-
-        /* ----------------------------------------------------
-           POSICIÓN LÓGICA
-           ---------------------------------------------------- */
-
         this.compartment = null;
 
         this.layer = null;
 
         this.slot = null;
 
-
-        /* ----------------------------------------------------
-           ELEMENTO HTML
-           ---------------------------------------------------- */
-
         this.element = null;
-
-
-        /* ----------------------------------------------------
-           ESTADO
-           ---------------------------------------------------- */
 
         this.removed = false;
 
         this.selected = false;
 
         this.dragging = false;
-
     }
-
 }
 
 
 /* ============================================================
    LAYER
-   ============================================================
-
-   Cada capa tiene SIEMPRE 3 posiciones:
-
-       slots[0]
-       slots[1]
-       slots[2]
-
-   Puede haber:
-
-       [🍎][  ][🍌]
-
-   o:
-
-       [  ][  ][  ]
-
-   o:
-
-       [🍎][🍎][🍎]
-
    ============================================================ */
 
 class Layer {
@@ -97,70 +55,40 @@ class Layer {
 
         this.index = index;
 
-
         this.slots = [
-
             null,
-
             null,
-
             null
-
         ];
-
     }
 
-
-    /* --------------------------------------------------------
-       OBJETOS DE LA CAPA
-       -------------------------------------------------------- */
 
     objects() {
 
         return this.slots.filter(
             object => object !== null
         );
-
     }
 
-
-    /* --------------------------------------------------------
-       NÚMERO DE OBJETOS
-       -------------------------------------------------------- */
 
     get count() {
 
         return this.objects().length;
-
     }
 
-
-    /* --------------------------------------------------------
-       CAPA VACÍA
-       -------------------------------------------------------- */
 
     get empty() {
 
         return this.count === 0;
-
     }
 
-
-    /* --------------------------------------------------------
-       CAPA COMPLETA
-       -------------------------------------------------------- */
 
     get full() {
 
         return this.count ===
             CONFIG.HUECOS_POR_ESTANTE;
-
     }
 
-
-    /* --------------------------------------------------------
-       OBTENER OBJETO DE UN HUECO
-       -------------------------------------------------------- */
 
     get(slot) {
 
@@ -170,28 +98,17 @@ class Layer {
         ) {
 
             return null;
-
         }
 
         return this.slots[slot];
-
     }
 
-
-    /* --------------------------------------------------------
-       ¿ESTÁ OCUPADO?
-       -------------------------------------------------------- */
 
     hasObjectAt(slot) {
 
         return this.get(slot) !== null;
-
     }
 
-
-    /* --------------------------------------------------------
-       AÑADIR OBJETO
-       -------------------------------------------------------- */
 
     addTo(slot, object) {
 
@@ -201,7 +118,6 @@ class Layer {
         ) {
 
             return false;
-
         }
 
 
@@ -210,23 +126,16 @@ class Layer {
         ) {
 
             return false;
-
         }
 
 
         this.slots[slot] = object;
 
-
         object.slot = slot;
 
         return true;
-
     }
 
-
-    /* --------------------------------------------------------
-       QUITAR OBJETO
-       -------------------------------------------------------- */
 
     removeFrom(slot) {
 
@@ -236,13 +145,11 @@ class Layer {
         ) {
 
             return null;
-
         }
 
 
         const object =
             this.slots[slot];
-
 
         this.slots[slot] = null;
 
@@ -250,75 +157,46 @@ class Layer {
         if (object) {
 
             object.slot = null;
-
         }
 
 
         return object;
-
     }
 
-
-    /* --------------------------------------------------------
-       LIMPIAR CAPA
-       -------------------------------------------------------- */
 
     clear() {
 
         this.slots = [
-
             null,
             null,
             null
-
         ];
-
     }
 
-
-    /* --------------------------------------------------------
-       COMPROBAR TRÍO
-       -------------------------------------------------------- */
 
     isTriple() {
 
+        const objects =
+            this.objects();
+
+
         if (
-            !this.full
+            objects.length !== 3
         ) {
 
             return false;
-
         }
 
 
-        const a =
-            this.slots[0];
-
-        const b =
-            this.slots[1];
-
-        const c =
-            this.slots[2];
-
-
         return (
+            objects[0].trioKey ===
+            objects[1].trioKey &&
 
-            a &&
-            b &&
-            c &&
-
-            a.trioKey === b.trioKey &&
-
-            b.trioKey === c.trioKey
-
+            objects[1].trioKey ===
+            objects[2].trioKey
         );
-
     }
 
-
-    /* --------------------------------------------------------
-       OBTENER TRÍO
-       -------------------------------------------------------- */
 
     getTriple() {
 
@@ -327,40 +205,16 @@ class Layer {
         ) {
 
             return [];
-
         }
 
 
-        return [
-
-            this.slots[0],
-
-            this.slots[1],
-
-            this.slots[2]
-
-        ];
-
+        return this.objects();
     }
-
 }
 
 
 /* ============================================================
-   COMPARTMENT
-   ============================================================
-
-   Un Compartment es un ESTANTE.
-
-   Cada estante puede tener:
-
-       1 capa
-       2 capas
-       3 capas
-       N capas
-
-   Pero TODAS las capas tienen exactamente 3 huecos.
-
+   COMPARTMENT / ESTANTE
    ============================================================ */
 
 class Compartment {
@@ -370,51 +224,21 @@ class Compartment {
         this.element =
             element || null;
 
-
-        /* ----------------------------------------------------
-           CAPAS
-           ---------------------------------------------------- */
-
         this.layers = [];
-
-
-        /* ----------------------------------------------------
-           ESTANTE BLOQUEADO
-           ---------------------------------------------------- */
 
         this.locked = false;
 
-
-        /* ----------------------------------------------------
-           TRÍOS NECESARIOS PARA DESBLOQUEAR
-           ---------------------------------------------------- */
-
         this.unlockAfterTriples = 0;
 
-
-        /* ----------------------------------------------------
-           TRÍOS CONSEGUIDOS
-           ---------------------------------------------------- */
-
         this.triplesCompleted = 0;
-
-
-        /* ----------------------------------------------------
-           ID
-           ---------------------------------------------------- */
 
         this.id =
             "shelf_" +
             Math.random()
                 .toString(36)
                 .substring(2, 9);
-
     }
 
-
-    /* --------------------------------------------------------
-       CREAR CAPA
-       -------------------------------------------------------- */
 
     ensureLayer(index) {
 
@@ -427,106 +251,86 @@ class Compartment {
                     this.layers.length
                 )
             );
-
         }
 
 
         return this.layers[index];
-
     }
 
 
-    /* --------------------------------------------------------
-       CAPA FRONTAL
-       --------------------------------------------------------
-
-       La capa frontal es siempre la primera
-       capa que contiene objetos.
-
-       Las capas vacías se eliminan
-       automáticamente del frente.
-
-       -------------------------------------------------------- */
+    /*
+     * IMPORTANTE:
+     *
+     * NO eliminamos capas vacías.
+     *
+     * Buscamos la primera capa que
+     * todavía contiene objetos.
+     */
 
     activeLayer() {
 
-        while (
-
-            this.layers.length > 0 &&
-
-            this.layers[0].empty
-
+        for (
+            const layer of this.layers
         ) {
 
-            this.layers.shift();
+            if (
+                !layer.empty
+            ) {
 
+                return layer;
+            }
         }
 
 
-        // Reindexamos
-
-        this.layers.forEach(
-            (layer, index) => {
-
-                layer.index = index;
-
-            }
-        );
-
-
-        return this.layers[0] || null;
-
+        return null;
     }
 
-
-    /* --------------------------------------------------------
-       AÑADIR CAPA
-       -------------------------------------------------------- */
 
     addLayer() {
 
-        const layer =
-            new Layer(
-                this.layers.length
-            );
-
-        this.layers.push(layer);
-
-        return layer;
-
+        return this.ensureLayer(
+            this.layers.length
+        );
     }
 
-
-    /* --------------------------------------------------------
-       ¿ESTÁ VACÍO EL ESTANTE?
-       -------------------------------------------------------- */
 
     isEmpty() {
 
         return this.layers.every(
-            layer => layer.empty
+            layer =>
+                layer.empty
         );
-
     }
 
-
-    /* --------------------------------------------------------
-       ¿TIENE MÁS CAPAS?
-       -------------------------------------------------------- */
 
     hasMoreLayers() {
 
-        return this.layers.length > 1;
+        const activeIndex =
+            this.layers.findIndex(
+                layer =>
+                    !layer.empty
+            );
 
+
+        if (
+            activeIndex === -1
+        ) {
+
+            return false;
+        }
+
+
+        return this.layers
+            .slice(activeIndex + 1)
+            .some(
+                layer =>
+                    !layer.empty
+            );
     }
 
 
-    /* --------------------------------------------------------
-       BLOQUEAR
-       -------------------------------------------------------- */
-
     lock(
-        triplesRequired = 0
+        triplesRequired = 1
     ) {
 
         this.locked = true;
@@ -535,13 +339,8 @@ class Compartment {
             triplesRequired;
 
         this.updateLockedVisual();
-
     }
 
-
-    /* --------------------------------------------------------
-       DESBLOQUEAR
-       -------------------------------------------------------- */
 
     unlock() {
 
@@ -552,13 +351,8 @@ class Compartment {
         this.triplesCompleted = 0;
 
         this.updateLockedVisual();
-
     }
 
-
-    /* --------------------------------------------------------
-       REGISTRAR TRÍO
-       -------------------------------------------------------- */
 
     registerTriple() {
 
@@ -566,29 +360,20 @@ class Compartment {
 
 
         if (
-
             this.locked &&
-
             this.triplesCompleted >=
             this.unlockAfterTriples
-
         ) {
 
             this.unlock();
 
             return true;
-
         }
 
 
         return false;
-
     }
 
-
-    /* --------------------------------------------------------
-       ASPECTO VISUAL DEL BLOQUEO
-       -------------------------------------------------------- */
 
     updateLockedVisual() {
 
@@ -597,34 +382,14 @@ class Compartment {
         ) {
 
             return;
-
         }
 
 
-        if (
+        this.element.classList.toggle(
+            "lockedShelf",
             this.locked
-        ) {
-
-            this.element
-                .classList
-                .add(
-                    "lockedShelf"
-                );
-
-        }
-
-        else {
-
-            this.element
-                .classList
-                .remove(
-                    "lockedShelf"
-                );
-
-        }
-
+        );
     }
-
 }
 
 
@@ -657,12 +422,9 @@ class GameModel {
 
         this.gameOver = false;
 
+        this.moves = 0;
     }
 
-
-    /* --------------------------------------------------------
-       LIMPIAR TABLERO
-       -------------------------------------------------------- */
 
     clear() {
 
@@ -676,12 +438,9 @@ class GameModel {
 
         this.gameOver = false;
 
+        this.moves = 0;
     }
 
-
-    /* --------------------------------------------------------
-       REGISTRAR ESTANTE
-       -------------------------------------------------------- */
 
     addCompartment(compartment) {
 
@@ -690,13 +449,8 @@ class GameModel {
         );
 
         return compartment;
-
     }
 
-
-    /* --------------------------------------------------------
-       REGISTRAR OBJETO
-       -------------------------------------------------------- */
 
     addObject(object) {
 
@@ -705,13 +459,8 @@ class GameModel {
         );
 
         return object;
-
     }
 
-
-    /* --------------------------------------------------------
-       OBJETOS ACTIVOS
-       -------------------------------------------------------- */
 
     activeObjects() {
 
@@ -719,25 +468,17 @@ class GameModel {
             object =>
                 !object.removed
         );
-
     }
 
-
-    /* --------------------------------------------------------
-       ¿QUEDAN OBJETOS?
-       -------------------------------------------------------- */
 
     hasObjects() {
 
-        return this.activeObjects()
-            .length > 0;
-
+        return (
+            this.activeObjects()
+                .length > 0
+        );
     }
 
-
-    /* --------------------------------------------------------
-       INCREMENTAR COMBO
-       -------------------------------------------------------- */
 
     registerTriple() {
 
@@ -746,21 +487,17 @@ class GameModel {
 
 
         if (
-
             now -
             this.lastTripleTime
             <= CONFIG.VENTANA_COMBO
-
         ) {
 
             this.combo++;
-
         }
 
         else {
 
             this.combo = 1;
-
         }
 
 
@@ -769,27 +506,20 @@ class GameModel {
 
 
         return this.combo;
-
     }
 
-
-    /* --------------------------------------------------------
-       REINICIAR COMBO
-       -------------------------------------------------------- */
 
     resetCombo() {
 
         this.combo = 0;
 
         this.lastTripleTime = 0;
-
     }
-
 }
 
 
 /* ============================================================
-   INSTANCIA GLOBAL DEL MODELO
+   INSTANCIA GLOBAL
    ============================================================ */
 
 const GAME_MODEL =

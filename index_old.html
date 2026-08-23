@@ -1,0 +1,1422 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#b86549">
+<title>Shelf Triple v8</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#e7eef0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#302821}
+#app{height:100%;max-width:920px;margin:auto;display:flex;flex-direction:column}
+header{height:64px;flex:0 0 64px;background:linear-gradient(#bd6a4d,#a8523e);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:6px 12px;box-shadow:0 3px 8px #0004;z-index:100}
+.title{font-weight:900;font-size:18px} .sub{font-size:10px;opacity:.9}
+.stats{display:flex;gap:6px;align-items:center} .pill{background:#733e37aa;border-radius:13px;padding:7px 9px;font-weight:900;font-size:13px}
+.timer{background:#f5c64f;color:#5d4020;border-radius:11px;padding:7px 15px;font-weight:950;font-size:17px}
+#scene{flex:1;min-height:0;overflow:auto;padding:18px 7px 12px;background:linear-gradient(#edf4f5,#dfe9eb)}
+#cabinets{width:min(650px,100%);margin:0 auto;display:grid;grid-template-columns:1fr .92fr 1fr;gap:9px;align-items:start}
+.cabinet{background:#eadfce;border:5px solid #cfbda0;border-radius:5px;padding:6px;box-shadow:7px 8px 10px #0002,inset 0 0 0 2px #f8f0e4}
+.cabinet.center{margin-top:54px}
+.compartment{height:96px;margin-bottom:7px;position:relative;background:linear-gradient(#f6f1e8,#ded4c5);border:2px solid #b9a58a;border-radius:2px;box-shadow:inset 0 8px 12px #fff8,inset 0 -8px 0 #c2aa89}
+.compartment:last-child{margin-bottom:0}.compartment:before{content:'';position:absolute;inset:6px;background:linear-gradient(110deg,#0000000d,#ffffff12 45%,#00000008);pointer-events:none;z-index:0}
+.slotgrid{position:absolute;inset:3px 4px 7px;display:grid;grid-template-columns:repeat(3,1fr);gap:1px}
+.cell{position:relative;min-width:0;height:100%;overflow:visible;border-right:1px solid #b8a48833}
+.cell:after{content:"";position:absolute;left:8%;right:8%;bottom:0;height:4px;background:#9b866855;border-radius:4px;z-index:1}
+.obj{position:absolute;left:9%;width:82%;bottom:var(--bottom);height:70px;border:0;border-radius:10px 10px 7px 7px;background:var(--c);color:white;display:flex;align-items:center;justify-content:center;font-size:28px;line-height:1;box-shadow:0 5px 5px #0005,inset 3px 0 7px #fff5,inset -4px 0 7px #0003;z-index:var(--z);transform:translate(var(--drag-x,0px),var(--drag-y,0px)) scale(var(--scale));transform-origin:center bottom;cursor:pointer;touch-action:none;padding:0;transition:transform .12s ease}
+.obj i{position:absolute;left:6px;top:6px;width:5px;height:38%;border-radius:6px;background:#fff7}
+.obj small{position:absolute;bottom:2px;font-size:6px;color:#fff;opacity:.85}
+.obj.front{cursor:grab}
+.obj.back{pointer-events:none;filter:brightness(.76)}
+.obj.selected{transform:translate(var(--drag-x,0px),calc(var(--drag-y,0px) - 13px)) scale(calc(var(--scale) * 1.08));z-index:80!important;filter:brightness(1.1)}
+.obj.dragging{transition:none!important;z-index:100!important;filter:brightness(1.08) drop-shadow(0 10px 7px #0004)}
+.obj.returning{transition:transform .22s cubic-bezier(.2,.8,.2,1)!important}
+.obj.removing{animation:pop .28s forwards}
+@keyframes pop{50%{transform:scale(1.18);opacity:.7}100%{transform:scale(.05);opacity:0}}
+#hint{flex:0 0 auto;text-align:center;font-size:11px;color:#625b53;padding:6px 12px 9px;background:#e7eef0}
+#toast{position:fixed;top:74px;left:50%;transform:translate(-50%,-12px);opacity:0;background:#29231f;color:#fff;border-radius:20px;padding:9px 15px;font-weight:900;z-index:200;transition:.2s}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+@media(max-width:600px){header{height:58px;flex-basis:58px}.title{font-size:16px}.timer{font-size:15px;padding:6px 12px}.pill{font-size:11px;padding:6px 8px}#scene{padding:12px 4px 8px}.compartment{height:84px}.obj{height:62px;font-size:24px}}
+
+#tutorialTip{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%) scale(.96);
+width:min(320px,86vw);padding:16px 18px;background:#fffdf7;color:#392d25;
+border:3px solid #b86549;border-radius:16px;box-shadow:0 12px 32px #0004;
+z-index:300;text-align:center;font-size:14px;font-weight:700;line-height:1.4;
+opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+#tutorialTip.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#tutorialTip strong{display:block;font-size:18px;margin-bottom:7px}
+#tutorialTip .arrow{margin-top:8px;font-size:25px;animation:tipBounce .7s infinite alternate}
+@keyframes tipBounce{from{transform:translateX(-5px)}to{transform:translateX(5px)}}
+
+
+#levelTimeoutTip{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%) scale(.96);
+width:min(320px,86vw);padding:18px;background:#fffdf7;color:#392d25;
+border:3px solid #b86549;border-radius:16px;box-shadow:0 12px 32px #0004;
+z-index:310;text-align:center;font-size:15px;font-weight:700;line-height:1.5;
+opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+#levelTimeoutTip.show{opacity:1;transform:translate(-50%,-50%) scale(1);pointer-events:auto}
+#levelTimeoutTip strong{display:block;font-size:20px;margin-bottom:8px}
+#retryLevelBtn{margin-top:12px;border:0;border-radius:10px;padding:10px 18px;
+background:#b86549;color:white;font-weight:800;cursor:pointer}
+
+
+
+.modalBtns{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+.modalBtns button{border:0;border-radius:10px;padding:10px 15px;background:#b86549;color:white;font-weight:800;cursor:pointer;font-size:14px}
+.modalBtns .secondaryBtn{background:#7b6b63}
+#homeScreen{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.96);
+width:min(360px,88vw);padding:22px;background:#fffdf7;color:#392d25;border:3px solid #b86549;
+border-radius:18px;box-shadow:0 14px 40px #0005;z-index:320;text-align:center;
+opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+#homeScreen.show{opacity:1;transform:translate(-50%,-50%) scale(1);pointer-events:auto}
+#homeScreen strong{display:block;font-size:22px;margin-bottom:9px}
+.homeText{font-size:15px;line-height:1.5}
+
+
+/* Objetinos Contrareloj V1.3 */
+.brand{min-width:0}
+.headerActions{display:flex;align-items:center;gap:8px}
+.exitGameBtn{width:38px;height:38px;border:0;border-radius:11px;background:#7b6b63;color:#fff;
+font-size:22px;font-weight:900;display:grid;place-items:center;cursor:pointer;box-shadow:0 2px 5px #0003}
+.exitGameBtn:active{transform:scale(.94)}
+.levelHud{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:25;display:flex;gap:7px;pointer-events:none}
+.levelHud span{background:#fffdf7dd;color:#57483f;border:1px solid #d4c6b4;border-radius:13px;padding:4px 9px;font-size:11px;font-weight:900;box-shadow:0 2px 6px #0002}
+#hint{min-height:36px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;text-align:center;font-size:11px;color:#625b53;padding:7px 14px 9px;background:#e7eef0;line-height:1.35}
+@media(max-width:600px){
+  header{height:58px;flex-basis:58px}.title{font-size:16px}.sub{font-size:10px}
+  .timer{font-size:15px;padding:6px 12px}.exitGameBtn{width:34px;height:34px;font-size:20px}.levelHud{top:6px}
+}
+
+
+.scoreBadge{display:inline-flex;align-items:center;justify-content:center;gap:3px;
+background:#7b5048;color:#fff;border-radius:13px;padding:7px 10px;font-size:13px;
+min-width:42px;box-shadow:0 2px 5px #0002}
+.scoreBadge b{font-weight:900}
+@media(max-width:600px){
+  .scoreBadge{font-size:12px;padding:6px 8px;min-width:38px}
+}
+
+
+/* V1.3.2 — anclaje físico de objetos al fondo de cada posición */
+.shelf-slot{position:relative;overflow:visible}
+.shelf-slot .item{
+  position:absolute !important;
+  top:auto !important;
+  bottom:0 !important;
+  transform-origin:center bottom;
+  margin:0 !important;
+}
+.shelf-slot .item.s1{left:0}
+.shelf-slot .item.s2{left:50%;transform:translateX(-50%)}
+.shelf-slot .item.s3{right:0}
+
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="brand">
+    <div class="title">🛒 Objetinos Contrareloj</div>
+    <div class="sub">Versión V1.3.3</div>
+  </div>
+  <div class="headerActions">
+    <span class="timer" id="timer">00:00</span>
+    <span class="scoreBadge">⭐ <b id="score">0</b></span>
+    <button id="exitGameBtn" class="exitGameBtn" aria-label="Salir y guardar progreso" title="Salir y guardar progreso">↩</button>
+  </div>
+</header>
+<div id="scene"><div class="levelHud"><span>Lv. <b id="level">1</b></span></div><div id="cabinets"><section class="cabinet left"><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="0"><button class="obj front" data-pos="0" data-depth="0" data-type="apple" style="--c:#d64b4b;--bottom:4px;--scale:1;--z:40">🍎<small>apple</small></button></div><div class="cell" data-pos="1"><button class="obj front" data-pos="1" data-depth="0" data-type="apple" style="--c:#d64b4b;--bottom:4px;--scale:1;--z:40">🍎<small>apple</small></button></div><div class="cell" data-pos="2"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="3"><button class="obj front" data-pos="3" data-depth="0" data-type="apple" style="--c:#d64b4b;--bottom:4px;--scale:1;--z:40">🍎<small>apple</small></button></div><div class="cell" data-pos="4"></div><div class="cell" data-pos="5"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="6"></div><div class="cell" data-pos="7"></div><div class="cell" data-pos="8"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="9"></div><div class="cell" data-pos="10"></div><div class="cell" data-pos="11"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="12"></div><div class="cell" data-pos="13"></div><div class="cell" data-pos="14"></div></div></div></section><section class="cabinet center"><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="15"></div><div class="cell" data-pos="16"></div><div class="cell" data-pos="17"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="18"></div><div class="cell" data-pos="19"></div><div class="cell" data-pos="20"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="21"></div><div class="cell" data-pos="22"></div><div class="cell" data-pos="23"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="24"></div><div class="cell" data-pos="25"></div><div class="cell" data-pos="26"></div></div></div></section><section class="cabinet right"><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="27"></div><div class="cell" data-pos="28"></div><div class="cell" data-pos="29"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="30"></div><div class="cell" data-pos="31"></div><div class="cell" data-pos="32"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="33"></div><div class="cell" data-pos="34"></div><div class="cell" data-pos="35"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="36"></div><div class="cell" data-pos="37"></div><div class="cell" data-pos="38"></div></div></div><div class="compartment"><div class="slotgrid"><div class="cell" data-pos="39"></div><div class="cell" data-pos="40"></div><div class="cell" data-pos="41"></div></div></div></section></div></div>
+<div id="hint"></div>
+<div id="toast"></div><div id="levelTimeoutTip">
+<strong>⏱️ Tiempo agotado</strong>
+No has superado este nivel.
+<div class="modalBtns">
+<button id="retryLevelBtn">Reintentar nivel</button>
+<button id="exitLevelBtn" class="secondaryBtn">Salir</button>
+</div>
+</div>
+<div id="homeScreen">
+<strong>🛒 Objetinos Contrareloj</strong>
+<div class="homeText" id="homeText"></div>
+<div class="modalBtns" id="homeButtons"></div>
+</div>
+<div id="tutorialTip"><strong>💡 ¿Cómo se juega?</strong>Mueve los objetos para juntar los <b>3 objetos iguales</b>.<br>Hay dos en un hueco y otro en la estantería de al lado.<div class="arrow">👆</div></div>
+</div>
+
+
+<script>
+(() => {
+  'use strict';
+
+  /*
+   * SHELF TRIPLE — CORE ENGINE
+   * --------------------------
+   * Modelo:
+   *   compartment = hueco de 3 posiciones.
+   *   layer        = una fila de 3 posiciones.
+   *   Cada layer contiene 0..3 objetos.
+   *   Solo layer[0] es interactiva.
+   *   Si layer[0] queda vacía, se elimina y layer[1] pasa a ser layer[0].
+   *   Mover un objeto nunca crea capas.
+   *   Un puesto físico solo puede tener un objeto.
+   *
+   * Esta separación entre MODELO y VISTA deja preparada la aplicación
+   * para añadir niveles, animaciones, sonidos y gráficos sin tocar la
+   * mecánica básica.
+   */
+
+  const GAME = {
+    score: 0,
+    level: 1,
+    time: 360,
+    selected: null,
+    dragging: false,
+    dragStartX: 0,
+    dragStartY: 0,
+    dragPointerId: null,
+    nextId: 1,
+    locked: false,
+    tutorialTimer: null,
+    tutorialShown: false,
+    levelConfig: null,
+    levelTimer: null,
+    levelTimeLeft: 0,
+    levelTimedOut: false,
+    saveKey: 'objetinos_contrareloj_v1_0_last_level'
+  };
+
+  const toast = document.getElementById('toast');
+  const scoreEl = document.getElementById('score');
+  const levelEl = document.getElementById('level');
+  const timerEl = document.getElementById('timer');
+  const tutorialTip = document.getElementById('tutorialTip');
+  const levelTimeoutTip = document.getElementById('levelTimeoutTip');
+  const retryLevelBtn = document.getElementById('retryLevelBtn');
+  const exitLevelBtn = document.getElementById('exitLevelBtn');
+  const homeScreen = document.getElementById('homeScreen');
+  const homeText = document.getElementById('homeText');
+  const homeButtons = document.getElementById('homeButtons');
+  const exitGameBtn = document.getElementById('exitGameBtn');
+  const hintEl = document.getElementById('hint');
+
+  const TYPE_INFO = {
+    apple:  { emoji:'🍎' },
+    milk:   { emoji:'🥛' },
+    juice:  { emoji:'🧃' },
+    bread:  { emoji:'🍞' },
+    can:    { emoji:'🥫' },
+    cheese: { emoji:'🧀' },
+    banana: { emoji:'🍌' },
+    cookie: { emoji:'🍪' },
+    cup:    { emoji:'🥤' },
+    ball:   { emoji:'🏐' },
+    snack:  { emoji:'🍿' }
+  };
+
+  let audioContext = null;
+
+  function playPopSound(){
+    try{
+      audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = audioContext;
+      if(ctx.state === 'suspended') ctx.resume();
+
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(820, now + 0.075);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.12);
+    }catch(e){
+      // El juego funciona igualmente si el navegador bloquea el audio.
+    }
+  }
+
+  function say(text) {
+    toast.textContent = text;
+    toast.classList.add('show');
+    clearTimeout(GAME.toastTimer);
+    GAME.toastTimer = setTimeout(() => toast.classList.remove('show'), 850);
+  }
+
+  function setScore(v) {
+    GAME.score = v;
+    scoreEl.textContent = v;
+  }
+
+  function setLevel(v) {
+    GAME.level = v;
+    levelEl.textContent = v;
+  }
+
+  function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+
+  function startLevel1TutorialTimer(){
+    if(GAME.level!==1 || GAME.tutorialShown) return;
+    clearTimeout(GAME.tutorialTimer);
+    GAME.tutorialTimer=setTimeout(()=>{
+      if(GAME.level===1 && !GAME.tutorialShown && totalObjects()===3){
+        GAME.tutorialShown=true;
+        tutorialTip.classList.add('show');
+      }
+    },3000);
+  }
+
+
+  function dismissTutorialFromInteraction(){
+    if(GAME.level !== 1) return;
+    if(!tutorialTip.classList.contains('show')) return;
+    clearTimeout(GAME.tutorialTimer);
+    tutorialTip.classList.remove('show');
+    GAME.tutorialShown=true;
+  }
+
+  function registerLevel1Activity(){
+    if(GAME.level!==1) return;
+    clearTimeout(GAME.tutorialTimer);
+    tutorialTip.classList.remove('show');
+    if(!GAME.tutorialShown) startLevel1TutorialTimer();
+  }
+
+  /*
+   * ---------- MODELO ----------
+   */
+
+  class GameObject {
+    constructor(type) {
+      this.id = GAME.nextId++;
+      this.type = type;
+    }
+  }
+
+  class Layer {
+    constructor() {
+      this.slots = [null, null, null];
+    }
+
+    get count() {
+      return this.slots.filter(Boolean).length;
+    }
+
+    isEmpty() {
+      return this.count === 0;
+    }
+
+    isFull() {
+      return this.count === 3;
+    }
+
+    hasObjectAt(slot) {
+      return !!this.slots[slot];
+    }
+
+    firstFreeSlot() {
+      return this.slots.findIndex(x => !x);
+    }
+
+    addTo(slot, object) {
+      if (slot < 0 || slot > 2) return false;
+      if (this.slots[slot]) return false;
+      this.slots[slot] = object;
+      return true;
+    }
+
+    removeFrom(slot) {
+      const object = this.slots[slot];
+      this.slots[slot] = null;
+      return object;
+    }
+
+    objects() {
+      return this.slots.filter(Boolean);
+    }
+  }
+
+  class Compartment {
+    constructor(element) {
+      this.element = element;
+      this.layers = [];
+    }
+
+    ensureLayer(index) {
+      while (this.layers.length <= index) {
+        this.layers.push(new Layer());
+      }
+      return this.layers[index];
+    }
+
+    activeLayer() {
+      while (this.layers.length && this.layers[0].isEmpty()) {
+        this.layers.shift();
+      }
+      return this.layers[0] || null;
+    }
+
+    activeObject(slot) {
+      const layer = this.activeLayer();
+      return layer ? layer.slots[slot] : null;
+    }
+
+    addObjectToActive(slot, object) {
+      const layer = this.activeLayer() || this.ensureLayer(0);
+      return layer.addTo(slot, object);
+    }
+
+    removeObjectFromActive(slot) {
+      const layer = this.activeLayer();
+      return layer ? layer.removeFrom(slot) : null;
+    }
+
+    allObjects() {
+      return this.layers.flatMap(layer => layer.objects());
+    }
+  }
+
+  const COMPARTMENTS = [];
+
+  function buildModelFromDOM() {
+    document.querySelectorAll('.compartment').forEach(compEl => {
+      const compartment = new Compartment(compEl);
+
+      /*
+       * Los objetos existentes se leen de la maqueta inicial.
+       * Su data-depth indica la capa y data-pos la posición física.
+       */
+      const raw = [...compEl.querySelectorAll('.obj')];
+
+      raw.forEach(el => {
+        const depth = Number(el.dataset.depth || 0);
+        const pos = Number(el.dataset.pos || 0);
+        const cellIndex = [...compEl.querySelectorAll('.cell')]
+          .findIndex(cell => Number(cell.dataset.pos) === pos);
+
+        const slot = cellIndex >= 0 ? cellIndex % 3 : 0;
+        const layer = compartment.ensureLayer(depth);
+
+        if (!layer.hasObjectAt(slot)) {
+          const obj = new GameObject(el.dataset.type);
+          obj.element = el;
+          obj.slot = slot;
+          obj.compartment = compartment;
+          obj.depth = depth;
+          layer.addTo(slot, obj);
+          el.__gameObject = obj;
+        }
+      });
+
+      COMPARTMENTS.push(compartment);
+    });
+  }
+
+  function findObject(object) {
+    for (const compartment of COMPARTMENTS) {
+      for (const layer of compartment.layers) {
+        for (let slot = 0; slot < 3; slot++) {
+          if (layer.slots[slot] === object) {
+            return { compartment, layer, slot };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  function totalObjects() {
+    return COMPARTMENTS.reduce((n,c) => n + c.allObjects().length, 0);
+  }
+
+  /*
+   * ---------- REGLAS ----------
+   */
+
+  function canMove(object, destination, slot) {
+    if (!object || !destination) return false;
+
+    const origin = findObject(object);
+    if (!origin) return false;
+
+    const active = destination.activeLayer() || destination.ensureLayer(0);
+
+    // Un puesto físico ocupado no puede recibir otro objeto.
+    if (active.hasObjectAt(slot)) {
+      say('Ese espacio ya está ocupado');
+      return false;
+    }
+
+    return true;
+  }
+
+  function moveObject(object, destination, slot) {
+    registerLevel1Activity();
+    if (!canMove(object, destination, slot)) return false;
+
+    const origin = findObject(object);
+    const sourceComp = origin.compartment;
+
+    origin.layer.removeFrom(origin.slot);
+    const targetLayer = destination.activeLayer() || destination.ensureLayer(0);
+
+    targetLayer.addTo(slot, object);
+    object.compartment = destination;
+    object.slot = slot;
+
+    normalizeAll();
+    renderAll();
+
+    checkCompartment(sourceComp);
+    if (destination !== sourceComp) checkCompartment(destination);
+
+    return true;
+  }
+
+  function checkCompartment(compartment) {
+    /*
+     * Regla fundamental:
+     * solo se examina la capa delantera.
+     */
+    const layer = compartment.activeLayer();
+    if (!layer) return;
+
+    // Si está vacía, activeLayer() ya la ha retirado y la siguiente
+    // ha pasado automáticamente a ser la capa delantera.
+    if (layer.isEmpty()) {
+      normalizeAll();
+      renderAll();
+      return;
+    }
+
+    const objects = layer.objects();
+
+    if (objects.length === 3 &&
+        objects[0].trioKey === objects[1].trioKey &&
+        objects[1].trioKey === objects[2].trioKey) {
+      removeTriple(compartment, objects);
+    }
+  }
+
+  function removeTriple(compartment, objects) {
+    if (GAME.locked) return;
+    GAME.locked = true;
+
+    objects.forEach(object => {
+      if (object.element) object.element.classList.add('removing');
+    });
+
+    setTimeout(() => {
+      const layer = compartment.activeLayer();
+
+      if (layer) {
+        for (let slot=0; slot<3; slot++) {
+          if (layer.slots[slot]) {
+            layer.slots[slot] = null;
+          }
+        }
+      }
+
+      setScore(GAME.score + 100);
+
+      // Eliminar la capa completa y hacer avanzar la inmediatamente posterior.
+      compartment.activeLayer();
+
+      normalizeAll();
+      renderAll();
+
+      GAME.locked = false;
+
+      if (totalObjects() === 0) {
+        setScore(GAME.score + 250);
+        clearTimeout(GAME.tutorialTimer);
+        clearInterval(GAME.levelTimer);
+        tutorialTip.classList.remove('show');
+
+        // El nivel completado queda guardado. Al pasar al siguiente,
+        // generateLevel() guardará también el nuevo nivel actual.
+        saveCurrentLevel();
+
+        say(`🎉 Nivel ${GAME.level} completado`);
+        setTimeout(nextLevel, 1000);
+      } else {
+        // Al avanzar una capa pueden aparecer nuevos tríos.
+        COMPARTMENTS.forEach(checkCompartment);
+      }
+    }, 280);
+  }
+
+
+  /*
+   * ---------- GENERADOR DE NIVELES ----------
+   *
+   * La dificultad crece por niveles:
+   * 1: 3 objetos / 1 trío / sin capas.
+   * 2: 6 objetos / 2 tríos / sin capas.
+   * 3: 9 objetos / 3 tríos / sin capas.
+   * 4: 12 objetos / 4 tríos / primera capa parcial.
+   * 5+: aumenta progresivamente objetos y profundidad.
+   *
+   * El generador siempre trabaja en grupos de 3 para que cada nivel
+   * tenga una solución completa.
+   */
+
+  const GENERATOR_TYPES = Object.keys(TYPE_INFO);
+
+
+
+  function getSavedLevel(){
+    try{
+      const saved=parseInt(localStorage.getItem(GAME.saveKey),10);
+      return Number.isFinite(saved) && saved>=1 ? saved : 1;
+    }catch(e){
+      return 1;
+    }
+  }
+
+  function saveCurrentLevel(){
+    try{
+      localStorage.setItem(GAME.saveKey,String(GAME.level));
+      localStorage.setItem('objetinos_contrareloj_has_progress','1');
+    }catch(e){
+      console.warn('No se pudo guardar el progreso en este navegador.',e);
+    }
+  }
+
+  function hasSavedProgress(){
+    try{
+      const n=parseInt(localStorage.getItem(GAME.saveKey),10);
+      return Number.isFinite(n) && n>=1;
+    }catch(e){ return false; }
+  }
+
+  function clearSavedProgress(){
+    try{
+      localStorage.removeItem(GAME.saveKey);
+      localStorage.removeItem('objetinos_contrareloj_has_progress');
+    }catch(e){}
+  }
+
+  function showHomeScreen(){
+    clearInterval(GAME.levelTimer);
+    GAME.locked=true;
+    hideTimeoutTip();
+    const saved=hasSavedProgress();
+    homeText.textContent=saved
+      ? `Tienes una partida guardada en el nivel ${getSavedLevel()}.`
+      : 'Es tu primera partida. ¡Vamos a empezar!';
+    homeButtons.innerHTML='';
+
+    const start=document.createElement('button');
+    start.textContent=saved ? 'Jugar desde cero' : 'Comenzar partida';
+    start.addEventListener('click',()=>{
+      clearSavedProgress();
+      hideHomeScreen();
+      generateLevel(1);
+    });
+    homeButtons.appendChild(start);
+
+    if(saved){
+      const cont=document.createElement('button');
+      cont.textContent='Continuar partida';
+      cont.addEventListener('click',()=>{
+        const level=getSavedLevel();
+        hideHomeScreen();
+        generateLevel(level);
+      });
+      homeButtons.appendChild(cont);
+    }
+    homeScreen.classList.add('show');
+  }
+
+  function hideHomeScreen(){
+    homeScreen.classList.remove('show');
+    GAME.locked=false;
+  }
+
+
+  function getLevelInstruction(level){
+    if(level <= 1) return '💡 Junta los 3 objetos iguales. Toca un objeto y después una posición libre.';
+    if(level <= 3) return '👉 Busca los 3 objetos iguales y colócalos en posiciones libres de la capa delantera.';
+    if(level <= 6) return '🧩 Los objetos de atrás están sombreados. Solo puedes mover los de la capa delantera.';
+    if(level <= 10) return '🔎 Cuando una fila delantera queda vacía, aparece la capa siguiente. Observa antes de mover.';
+    if(level <= 15) return '🧠 Planifica los movimientos y deja posiciones libres para reunir cada trío.';
+    if(level <= 20) return '⚠️ Los tríos pueden estar separados. Piensa qué capa quedará descubierta antes de mover.';
+    return '🎯 Observa, planifica y reúne los tríos sin bloquear las posiciones que necesitas.';
+  }
+
+  function updateLevelInstruction(){
+    if(hintEl) hintEl.textContent = getLevelInstruction(GAME.level);
+  }
+
+  function getLevelTime(level){
+    // 30 seconds at the start, with a modest increase as levels grow.
+    // This can be tuned later when balancing difficulty.
+    return Math.min(90, 30 + Math.floor((level-1)/3)*5);
+  }
+
+  function hideTimeoutTip(){
+    levelTimeoutTip?.classList.remove('show');
+  }
+
+  function showTimeoutTip(){
+    clearInterval(GAME.levelTimer);
+    GAME.levelTimedOut=true;
+    GAME.locked=true;
+    saveCurrentLevel();
+    levelTimeoutTip?.classList.add('show');
+    say(`⏱️ Tiempo agotado en el nivel ${GAME.level}`);
+  }
+
+  function startLevelTimer(){
+    clearInterval(GAME.levelTimer);
+    GAME.levelTimedOut=false;
+    GAME.levelTimeLeft=getLevelTime(GAME.level);
+
+    if(timerEl) timerEl.textContent=`${GAME.levelTimeLeft}s`;
+
+    GAME.levelTimer=setInterval(()=>{
+      if(GAME.locked || GAME.levelTimedOut) return;
+
+      GAME.levelTimeLeft--;
+
+      if(timerEl) timerEl.textContent=`${GAME.levelTimeLeft}s`;
+
+      if(GAME.levelTimeLeft<=0){
+        showTimeoutTip();
+      }
+    },1000);
+  }
+
+  exitLevelBtn?.addEventListener('click', (event)=>{
+    event.stopPropagation();
+    exitGameToHome();
+  });
+
+  function restartCurrentLevel(){
+    clearInterval(GAME.levelTimer);
+    clearTimeout(GAME.tutorialTimer);
+    GAME.level = 1;
+    GAME.score = 0;
+    GAME.levelTimedOut = false;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      level: 1,
+      score: 0
+    }));
+    updateScore();
+    setLevel(1);
+    updateLevelInstruction();
+    hideTimeoutTip();
+    tutorialTip.classList.remove('show');
+    generateLevel(1);
+  }
+
+  retryLevelBtn?.addEventListener('click',(event)=>{
+    event.preventDefault();
+    event.stopPropagation();
+    restartCurrentLevel();
+  });
+
+  exitLevelBtn?.addEventListener('click',(event)=>{
+    event.preventDefault();
+    event.stopPropagation();
+    showHomeScreen();
+  });
+
+  function levelConfig(level){
+    // Crecimiento suave: primero aumenta la cantidad de tríos y después
+    // introduce profundidad. Los niveles posteriores pueden continuar
+    // creciendo sin necesidad de rediseñar el motor.
+    const triples = Math.max(1, Math.min(12, Math.ceil(level / 2)));
+    const maxDepth = level < 4 ? 1 : Math.min(4, 1 + Math.floor((level - 3) / 2));
+
+    return {
+      level,
+      triples,
+      totalObjects: triples * 3,
+      maxDepth,
+      tutorial: level === 1
+    };
+  }
+
+  function clearBoardModel(){
+    GAME.selected = null;
+    COMPARTMENTS.length = 0;
+    document.querySelectorAll('.compartment').forEach(comp=>{
+      comp.querySelectorAll('.obj').forEach(o=>o.remove());
+    });
+  }
+
+  function shuffle(arr){
+    for(let i=arr.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+    return arr;
+  }
+
+  const VISUAL_VARIANTS = [
+    {id:'red',   color:'#d64b4b', filter:'none'},
+    {id:'blue',  color:'#4f7fc4', filter:'hue-rotate(175deg)'},
+    {id:'green', color:'#5c9b62', filter:'hue-rotate(85deg) saturate(.85)'},
+    {id:'gold',  color:'#d49a35', filter:'hue-rotate(330deg) saturate(1.1)'},
+    {id:'pink',  color:'#d77ca0', filter:'hue-rotate(300deg) saturate(.9)'},
+    {id:'purple',color:'#8964b8', filter:'hue-rotate(250deg) saturate(.9)'},
+    {id:'orange',color:'#d47735', filter:'hue-rotate(345deg) saturate(1.05)'},
+    {id:'cyan',  color:'#48a6a6', filter:'hue-rotate(150deg) saturate(.9)'}
+  ];
+
+  function makeUniqueTrioKey(type, variant){
+    return `${type}::${variant.id}`;
+  }
+
+
+  function createTrioDefinitions(count){
+    const defs = [];
+    const usedKeys = new Set();
+
+    for(let i=0;i<count;i++){
+      // Choose a base object, allowing repetition only if the visual variant
+      // is different.
+      const type = GENERATOR_TYPES[
+        Math.floor(Math.random()*GENERATOR_TYPES.length)
+      ];
+
+      const variants = shuffle(VISUAL_VARIANTS.slice());
+      let variant = variants.find(v =>
+        !usedKeys.has(makeUniqueTrioKey(type,v))
+      );
+
+      // If all predefined variants for this object have been used, create a
+      // new unmistakable variant.
+      if(!variant){
+        const n = i + 1;
+        variant = {
+          id:`generated-${type}-${n}`,
+          color:`hsl(${(n*67)%360} 72% 52%)`,
+          filter:`hue-rotate(${(n*67)%360}deg)`
+        };
+      }
+
+      const key = makeUniqueTrioKey(type,variant);
+
+      // Absolute guarantee: no two trios in the same level can have the
+      // same object + color/variant identity.
+      if(usedKeys.has(key)){
+        i--;
+        continue;
+      }
+
+      usedKeys.add(key);
+      defs.push({type,variant,key});
+    }
+
+    return defs;
+  }
+
+
+  function createVisualObject(type, pos, depth, variant){
+    const info = TYPE_INFO[type] || {emoji:'❓'};
+    const el = document.createElement('button');
+    el.className = 'obj front';
+    el.dataset.pos = String(pos);
+    el.dataset.depth = String(depth);
+    el.dataset.type = type;
+    el.dataset.variant = variant?.id || 'default';
+    el.dataset.trioKey = makeUniqueTrioKey(type,variant || {id:'default'});
+    el.style.setProperty('--c',variant?.color || '#d64b4b');
+    el.style.setProperty('--bottom','4px');
+    el.style.setProperty('--scale','1');
+    el.style.setProperty('--z',String(40-depth));
+    el.style.setProperty('--variant-filter',variant?.filter || 'none');
+    el.innerHTML = `${info.emoji}<small>${type}</small>`;
+    return el;
+  }
+
+  function addGeneratedObject(comp, slot, depth, type, variant){
+    const layer = comp.ensureLayer(depth);
+    if(layer.hasObjectAt(slot)) return false;
+
+    const obj = new GameObject(type);
+    obj.variant = variant;
+    obj.trioKey = makeUniqueTrioKey(type,variant);
+    obj.element = createVisualObject(type,slot,depth,variant);
+    obj.slot = slot;
+    obj.compartment = comp;
+    obj.depth = depth;
+
+    const cell = comp.element.querySelectorAll('.cell')[slot];
+    cell.appendChild(obj.element);
+    obj.element.__gameObject = obj;
+    layer.addTo(slot,obj);
+    return true;
+  }
+
+  /*
+   * Generación SOLUCIONABLE
+   *
+   * En lugar de repartir objetos completamente al azar, primero construimos
+   * los tríos que deberán existir y después los colocamos en posiciones.
+   *
+   * Para los primeros niveles todos los objetos están en la capa 0.
+   * Desde el nivel 4 se introducen objetos bloqueados en capas posteriores.
+   * Nunca se sobrepasan 3 objetos por capa y hueco.
+   */
+
+
+
+  function generateSolvableLevel(level){
+    const cfg = levelConfig(level);
+
+    const positions = [];
+    COMPARTMENTS.forEach((comp,ci)=>{
+      for(let slot=0;slot<3;slot++){
+        positions.push({comp,slot,ci,depth:0});
+      }
+    });
+
+    /*
+     * Every trio is created ONCE.
+     * Three objects are then placed for that trio.
+     * There is no operation anywhere that copies a trio afterwards.
+     */
+    const trios = createTrioDefinitions(cfg.triples);
+
+    // Level 1: fixed tutorial configuration.
+    if(level===1){
+      const t=trios[0];
+      addGeneratedObject(COMPARTMENTS[0],0,0,t.type,t.variant);
+      addGeneratedObject(COMPARTMENTS[0],1,0,t.type,t.variant);
+      addGeneratedObject(COMPARTMENTS[1],0,0,t.type,t.variant);
+      return cfg;
+    }
+
+    const available = shuffle(positions.slice());
+
+    // We first fill visible positions. Each trio consumes exactly 3.
+    let cursor=0;
+
+    for(const trio of trios){
+      for(let k=0;k<3;k++){
+        if(cursor >= available.length) {
+          throw new Error("No hay suficientes posiciones para colocar todos los tríos.");
+        }
+
+        const p=available[cursor++];
+
+        if(!addGeneratedObject(
+          p.comp,p.slot,0,
+          trio.type,trio.variant
+        )){
+          throw new Error("Intento de colocar dos objetos en la misma posición.");
+        }
+      }
+    }
+
+    /*
+     * For higher levels we progressively move SOME of the already generated
+     * objects behind another layer, but we NEVER duplicate them.
+     *
+     * Their trio identity travels with the object. Thus each identity still
+     * exists exactly three times.
+     */
+    if(cfg.maxDepth>1){
+      const candidates=[];
+
+      COMPARTMENTS.forEach(comp=>{
+        const front=comp.layers[0];
+        if(!front) return;
+
+        for(let slot=0;slot<3;slot++){
+          if(front.slots[slot]){
+            candidates.push({
+              comp,
+              slot,
+              object:front.slots[slot]
+            });
+          }
+        }
+      });
+
+      shuffle(candidates);
+
+      const moveCount=Math.min(
+        Math.floor((level-3)*1.5),
+        candidates.length
+      );
+
+      /*
+       * We only move an object to depth 1 if that position is not already
+       * occupied there. No new object is created.
+       */
+      for(let i=0;i<moveCount;i++){
+        const candidate=candidates[i];
+        const source= candidate.comp.layers[0];
+        const object=candidate.object;
+        const target=candidate.comp.ensureLayer(1);
+
+        if(target.hasObjectAt(candidate.slot)) continue;
+
+        source.removeFrom(candidate.slot);
+        target.addTo(candidate.slot,object);
+
+        object.depth=1;
+        object.compartment=candidate.comp;
+        object.slot=candidate.slot;
+      }
+    }
+
+    return cfg;
+  }
+
+
+
+  function validateLevelIntegrity(){
+    const trioCounts = new Map();
+    const visualCounts = new Map();
+    let total = 0;
+
+    COMPARTMENTS.forEach(comp=>{
+      comp.layers.forEach(layer=>{
+        layer.slots.forEach(obj=>{
+          if(!obj) return;
+
+          total++;
+
+          const key = obj.trioKey ||
+            makeUniqueTrioKey(obj.type,obj.variant || {id:'default'});
+
+          trioCounts.set(key,(trioCounts.get(key)||0)+1);
+
+          const visualKey = `${obj.type}::${obj.variant?.id || 'default'}`;
+          visualCounts.set(
+            visualKey,
+            (visualCounts.get(visualKey)||0)+1
+          );
+        });
+      });
+    });
+
+    // Every trio identity MUST occur exactly three times.
+    for(const [key,count] of trioCounts){
+      if(count !== 3){
+        return {
+          valid:false,
+          reason:`El trío ${key} aparece ${count} veces; debe aparecer exactamente 3.`
+        };
+      }
+    }
+
+    // Object + color/variant identity is itself the trio identity.
+    // Therefore it can never represent two separate trios.
+    for(const [key,count] of visualCounts){
+      if(count !== 3){
+        return {
+          valid:false,
+          reason:`El objeto/color ${key} aparece ${count} veces; debe pertenecer a un único trío.`
+        };
+      }
+    }
+
+    if(total !== cfgExpectedObjectCount()){
+      return {
+        valid:false,
+        reason:`El nivel tiene ${total} objetos pero se esperaban ${cfgExpectedObjectCount()}.`
+      };
+    }
+
+    return {valid:true};
+  }
+
+  function cfgExpectedObjectCount(){
+    return GAME.levelConfig ? GAME.levelConfig.triples * 3 : 0;
+  }
+
+
+  function generateLevel(level){
+    GAME.locked=false;
+    GAME.level=level;
+    GAME.levelTimedOut=false;
+    hideTimeoutTip();
+    setLevel(level);
+    updateLevelInstruction();
+    saveCurrentLevel();
+    clearInterval(GAME.levelTimer);
+
+    clearTimeout(GAME.tutorialTimer);
+    GAME.tutorialShown=false;
+    tutorialTip?.classList.remove('show');
+
+    clearBoardModel();
+
+    document.querySelectorAll('.compartment').forEach(compEl=>{
+      COMPARTMENTS.push(new Compartment(compEl));
+    });
+
+    GAME.levelConfig=generateSolvableLevel(level);
+
+    let integrity=validateLevelIntegrity();
+    let attempts=0;
+
+    while(!integrity.valid && attempts<10){
+      clearBoardModel();
+      document.querySelectorAll('.compartment').forEach(compEl=>{
+        COMPARTMENTS.push(new Compartment(compEl));
+      });
+      GAME.levelConfig=generateSolvableLevel(level);
+      integrity=validateLevelIntegrity();
+      attempts++;
+    }
+
+    if(!integrity.valid){
+      console.error('No se pudo generar un nivel válido:', integrity.reason);
+      throw new Error('Nivel generado sin solución completa.');
+    }
+
+    normalizeAll();
+    renderAll();
+
+    if(level===1) startLevel1TutorialTimer();
+
+    // Cada nivel comienza con su propio contador desde cero.
+    startLevelTimer();
+
+    say(`Nivel ${level}`);
+  }
+
+  function nextLevel(){
+    if(GAME.locked) return;
+    clearInterval(GAME.levelTimer);
+    generateLevel(GAME.level + 1);
+  }
+
+  /*
+   * ---------- VISTA ----------
+   */
+
+  function normalizeAll() {
+    COMPARTMENTS.forEach(compartment => {
+      // Las capas vacías delante desaparecen.
+      while (compartment.layers.length &&
+             compartment.layers[0].isEmpty()) {
+        compartment.layers.shift();
+      }
+
+      compartment.layers.forEach((layer, depth) => {
+        layer.slots.forEach((object, slot) => {
+          if (!object || !object.element) return;
+          object.depth = depth;
+          object.slot = slot;
+          object.compartment = compartment;
+        });
+      });
+    });
+  }
+
+  function cellFor(compartment, slot) {
+    const cells = [...compartment.element.querySelectorAll('.cell')];
+    return cells[slot] || null;
+  }
+
+  function renderCompartment(compartment) {
+    const cells = [...compartment.element.querySelectorAll('.cell')];
+
+    // Limpiamos el contenido visual de objetos sin destruir sus elementos.
+    cells.forEach(cell => {
+      [...cell.querySelectorAll('.obj')].forEach(obj => {
+        obj.style.pointerEvents = 'none';
+      });
+    });
+
+    compartment.layers.forEach((layer, depth) => {
+      layer.slots.forEach((object, slot) => {
+        if (!object || !object.element) return;
+
+        const cell = cellFor(compartment, slot);
+        if (!cell) return;
+
+        if (object.element.parentElement !== cell) {
+          cell.appendChild(object.element);
+        }
+
+        const active = depth === 0;
+        const offsets = [
+          [0,0,1],
+          [-7,0,.97],
+          [7,0,.94],
+          [-5,0,.92]
+        ];
+        const [dx,bottom,scale] = offsets[Math.min(depth, offsets.length-1)];
+
+        object.element.dataset.depth = depth;
+        object.element.dataset.pos =
+          Number(cell.dataset.pos || 0);
+
+        object.element.classList.toggle('front', active);
+        object.element.classList.toggle('back', !active);
+
+        object.element.style.pointerEvents =
+          active ? 'auto' : 'none';
+
+        object.element.style.setProperty('--dx', `${dx}px`);
+        object.element.style.setProperty('--bottom', `${bottom}px`);
+        object.element.style.setProperty('--scale', scale);
+        object.element.style.setProperty('--z', 40-depth);
+
+        // La capa inmediatamente posterior se ve sombreada.
+        object.element.style.opacity =
+          active ? '1' : (depth === 1 ? '.38' : '.22');
+
+        const variantFilter =
+          object.element.dataset.variant && object.element.style.getPropertyValue('--variant-filter')
+            ? object.element.style.getPropertyValue('--variant-filter')
+            : 'none';
+
+        object.element.style.filter =
+          active
+            ? variantFilter
+            : `${variantFilter} brightness(.58) saturate(.58)`;
+
+        const variantColor =
+          object.element.style.getPropertyValue('--c') || '#d64b4b';
+        object.element.style.boxShadow =
+          active
+            ? `0 0 0 3px ${variantColor} inset, 0 4px 8px #0003`
+            : `0 0 0 2px ${variantColor} inset, 0 3px 6px #0002`;
+      });
+    });
+  }
+
+  function renderAll() {
+    COMPARTMENTS.forEach(renderCompartment);
+  }
+
+  /*
+   * ---------- INTERACCIÓN ----------
+   */
+
+  function clearSelection() {
+    if (GAME.selected?.element) {
+      GAME.selected.element.classList.remove('selected','dragging','returning');
+      GAME.selected.element.style.setProperty('--drag-x','0px');
+      GAME.selected.element.style.setProperty('--drag-y','0px');
+    }
+    GAME.selected = null;
+    GAME.dragging = false;
+    GAME.dragPointerId = null;
+  }
+
+  function selectObject(object) {
+    registerLevel1Activity();
+    if (!object?.element) return;
+    if (!object.element.classList.contains('front')) return;
+
+    if (GAME.selected === object) {
+      clearSelection();
+      return;
+    }
+
+    if (GAME.selected?.element) {
+      GAME.selected.element.classList.remove('selected');
+    }
+
+    GAME.selected = object;
+    object.element.classList.add('selected');
+    say('Ahora toca una posición libre');
+  }
+
+  function objectFromElement(element) {
+    return element?.__gameObject || null;
+  }
+
+  function destinationFromCell(cell) {
+    if (!cell) return null;
+
+    const compartmentEl = cell.closest('.compartment');
+    const compartment =
+      COMPARTMENTS.find(c => c.element === compartmentEl);
+
+    if (!compartment) return null;
+
+    const cells = [...compartmentEl.querySelectorAll('.cell')];
+    const index = cells.indexOf(cell);
+
+    return {
+      compartment,
+      slot: index % 3
+    };
+  }
+
+  // Si el tooltip está visible, cualquier interacción con él o con el
+  // resto de la pantalla lo cierra inmediatamente.
+  document.addEventListener('pointerdown', dismissTutorialFromInteraction, true);
+
+  document.addEventListener('click', event => {
+    if (GAME.locked || GAME.dragging) return;
+
+    const objectEl = event.target.closest('.obj');
+    const cell = event.target.closest('.cell');
+
+    if (objectEl) {
+      const object = objectFromElement(objectEl);
+      if (object?.element.classList.contains('front')) {
+        selectObject(object);
+        return;
+      }
+    }
+
+    if (GAME.selected && cell) {
+      const destination = destinationFromCell(cell);
+      if (destination) {
+        const moved = moveObject(
+          GAME.selected,
+          destination.compartment,
+          destination.slot
+        );
+        if (moved) clearSelection();
+      }
+    }
+  });
+
+  document.addEventListener('pointerdown', event => {
+    if (GAME.locked) return;
+
+    const objectEl = event.target.closest('.obj.front');
+    if (!objectEl) return;
+
+    const object = objectFromElement(objectEl);
+    if (!object) return;
+
+    registerLevel1Activity();
+
+    GAME.selected = object;
+    GAME.dragging = true;
+    GAME.dragPointerId = event.pointerId;
+    GAME.dragStartX = event.clientX;
+    GAME.dragStartY = event.clientY;
+
+    object.element.classList.add('selected','dragging');
+    // Durante el arrastre el objeto no debe interceptar el puntero: de lo contrario
+    // elementFromPoint() detecta siempre su celda de origen aunque visualmente
+    // lo hayamos llevado sobre otra celda.
+    object.element.style.pointerEvents = 'none';
+    object.element.style.setProperty('--drag-x','0px');
+    object.element.style.setProperty('--drag-y','0px');
+
+    try {
+      objectEl.setPointerCapture(event.pointerId);
+    } catch (_) {}
+
+    event.preventDefault();
+  }, { passive:false });
+
+  document.addEventListener('pointermove', event => {
+    if (!GAME.dragging || !GAME.selected) return;
+    if (GAME.dragPointerId !== null && event.pointerId !== GAME.dragPointerId) return;
+
+    const dx = event.clientX - GAME.dragStartX;
+    const dy = event.clientY - GAME.dragStartY;
+
+    GAME.selected.element.style.setProperty('--drag-x', `${dx}px`);
+    GAME.selected.element.style.setProperty('--drag-y', `${dy}px`);
+
+    event.preventDefault();
+  }, { passive:false });
+
+  document.addEventListener('pointerup', event => {
+    if (!GAME.dragging || !GAME.selected) return;
+    if (GAME.dragPointerId !== null && event.pointerId !== GAME.dragPointerId) return;
+
+    const object = GAME.selected;
+    const objectEl = object.element;
+
+    GAME.dragging = false;
+    GAME.dragPointerId = null;
+
+    // Buscar la celda REAL situada bajo el dedo/cursor.
+    // Usamos elementsFromPoint como respaldo para evitar que otro elemento
+    // visual (objeto, sombra, etc.) oculte la celda destino.
+    const underPointer = document.elementsFromPoint
+      ? document.elementsFromPoint(event.clientX, event.clientY)
+      : [document.elementFromPoint(event.clientX, event.clientY)].filter(Boolean);
+    const cell = underPointer.find(el => el.classList && el.classList.contains('cell')) || null;
+
+    let moved = false;
+
+    if (cell) {
+      const destination = destinationFromCell(cell);
+      if (destination) {
+        moved = moveObject(
+          object,
+          destination.compartment,
+          destination.slot
+        );
+      }
+    }
+
+    if (moved) {
+      objectEl.style.setProperty('--drag-x','0px');
+      objectEl.style.setProperty('--drag-y','0px');
+      playPopSound();
+      clearSelection();
+      return;
+    }
+
+    // No se alcanzó una posición válida: vuelve suavemente al origen.
+    objectEl.style.pointerEvents = 'auto';
+    objectEl.classList.remove('dragging');
+    objectEl.classList.add('returning');
+    objectEl.style.setProperty('--drag-x','0px');
+    objectEl.style.setProperty('--drag-y','0px');
+
+    setTimeout(()=>{
+      objectEl.classList.remove('returning','selected');
+      if(GAME.selected === object){
+        GAME.selected = null;
+      }
+    },230);
+  });
+
+
+  /*
+   * ---------- ARRANQUE ----------
+   */
+
+
+  function exitGameToHome(){
+    saveCurrentLevel();
+    clearInterval(GAME.levelTimer);
+    clearTimeout(GAME.tutorialTimer);
+    clearSelection();
+    hideTimeoutTip();
+    tutorialTip.classList.remove('show');
+    showHomeScreen();
+  }
+
+  exitGameBtn?.addEventListener('click', (event)=>{
+    event.preventDefault();
+    event.stopPropagation();
+    exitGameToHome();
+  });
+
+  /*
+   * ---------- ARRANQUE ----------
+   * Solo existe UN contador: GAME.levelTimeLeft, mostrado en #timer.
+   * La primera entrada muestra la pantalla inicial.
+   */
+  showHomeScreen();
+
+})();
+</script>
+</body>
+</html>

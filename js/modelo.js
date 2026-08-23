@@ -1,6 +1,7 @@
 /* ============================================================
    OBJETINOS CONTRARELOJ
    MODELO DEL JUEGO
+   V1.4.1 - MOTOR CORREGIDO
    ============================================================ */
 
 
@@ -38,10 +39,10 @@ class GameObject {
 
         this.removed = false;
 
-        this.selected = false;
-
         this.dragging = false;
+
     }
+
 }
 
 
@@ -55,6 +56,9 @@ class Layer {
 
         this.index = index;
 
+        /*
+         * SIEMPRE exactamente 3 huecos.
+         */
         this.slots = [
             null,
             null,
@@ -68,25 +72,28 @@ class Layer {
         return this.slots.filter(
             object => object !== null
         );
+
     }
 
 
     get count() {
 
         return this.objects().length;
+
     }
 
 
     get empty() {
 
         return this.count === 0;
+
     }
 
 
     get full() {
 
-        return this.count ===
-            CONFIG.HUECOS_POR_ESTANTE;
+        return this.count === 3;
+
     }
 
 
@@ -94,37 +101,42 @@ class Layer {
 
         if (
             slot < 0 ||
-            slot >= CONFIG.HUECOS_POR_ESTANTE
+            slot > 2
         ) {
-
             return null;
         }
 
         return this.slots[slot];
+
     }
 
 
     hasObjectAt(slot) {
 
-        return this.get(slot) !== null;
+        return this.slots[slot] !== null;
+
     }
 
 
     addTo(slot, object) {
 
+        /*
+         * Un slot concreto.
+         */
         if (
             slot < 0 ||
-            slot >= CONFIG.HUECOS_POR_ESTANTE
+            slot > 2
         ) {
-
             return false;
         }
 
 
+        /*
+         * No se puede ocupar un hueco ocupado.
+         */
         if (
             this.slots[slot] !== null
         ) {
-
             return false;
         }
 
@@ -134,6 +146,36 @@ class Layer {
         object.slot = slot;
 
         return true;
+
+    }
+
+
+    /*
+     * Busca automáticamente el primer hueco libre.
+     */
+    addFirstFree(object) {
+
+        for (
+            let slot = 0;
+            slot < 3;
+            slot++
+        ) {
+
+            if (
+                this.slots[slot] === null
+            ) {
+
+                return this.addTo(
+                    slot,
+                    object
+                );
+
+            }
+
+        }
+
+        return false;
+
     }
 
 
@@ -141,9 +183,8 @@ class Layer {
 
         if (
             slot < 0 ||
-            slot >= CONFIG.HUECOS_POR_ESTANTE
+            slot > 2
         ) {
-
             return null;
         }
 
@@ -151,50 +192,70 @@ class Layer {
         const object =
             this.slots[slot];
 
+
         this.slots[slot] = null;
 
 
         if (object) {
 
             object.slot = null;
+
         }
 
 
         return object;
+
     }
 
 
-    clear() {
+    firstFreeSlot() {
 
-        this.slots = [
-            null,
-            null,
-            null
-        ];
+        for (
+            let i = 0;
+            i < 3;
+            i++
+        ) {
+
+            if (
+                this.slots[i] === null
+            ) {
+
+                return i;
+
+            }
+
+        }
+
+
+        return -1;
+
     }
 
 
     isTriple() {
 
-        const objects =
-            this.objects();
-
-
         if (
-            objects.length !== 3
+            !this.full
         ) {
 
             return false;
+
         }
 
 
-        return (
-            objects[0].trioKey ===
-            objects[1].trioKey &&
+        const a = this.slots[0];
+        const b = this.slots[1];
+        const c = this.slots[2];
 
-            objects[1].trioKey ===
-            objects[2].trioKey
+
+        return (
+            a &&
+            b &&
+            c &&
+            a.trioKey === b.trioKey &&
+            b.trioKey === c.trioKey
         );
+
     }
 
 
@@ -205,16 +266,23 @@ class Layer {
         ) {
 
             return [];
+
         }
 
 
-        return this.objects();
+        return [
+            this.slots[0],
+            this.slots[1],
+            this.slots[2]
+        ];
+
     }
+
 }
 
 
 /* ============================================================
-   COMPARTMENT / ESTANTE
+   COMPARTMENT = ESTANTE
    ============================================================ */
 
 class Compartment {
@@ -224,6 +292,12 @@ class Compartment {
         this.element =
             element || null;
 
+        this.id =
+            "shelf_" +
+            Math.random()
+                .toString(36)
+                .substring(2, 9);
+
         this.layers = [];
 
         this.locked = false;
@@ -232,11 +306,6 @@ class Compartment {
 
         this.triplesCompleted = 0;
 
-        this.id =
-            "shelf_" +
-            Math.random()
-                .toString(36)
-                .substring(2, 9);
     }
 
 
@@ -251,38 +320,49 @@ class Compartment {
                     this.layers.length
                 )
             );
+
         }
 
 
         return this.layers[index];
+
     }
 
 
     /*
      * IMPORTANTE:
      *
-     * NO eliminamos capas vacías.
+     * La capa frontal es la primera capa
+     * que tenga objetos.
      *
-     * Buscamos la primera capa que
-     * todavía contiene objetos.
+     * NO eliminamos físicamente las capas
+     * aquí. Solo buscamos la frontal.
+     *
+     * Esto evita problemas con las referencias
+     * de los objetos.
      */
 
     activeLayer() {
 
         for (
-            const layer of this.layers
+            let i = 0;
+            i < this.layers.length;
+            i++
         ) {
 
             if (
-                !layer.empty
+                !this.layers[i].empty
             ) {
 
-                return layer;
+                return this.layers[i];
+
             }
+
         }
 
 
         return null;
+
     }
 
 
@@ -291,41 +371,16 @@ class Compartment {
         return this.ensureLayer(
             this.layers.length
         );
+
     }
 
 
     isEmpty() {
 
         return this.layers.every(
-            layer =>
-                layer.empty
+            layer => layer.empty
         );
-    }
 
-
-    hasMoreLayers() {
-
-        const activeIndex =
-            this.layers.findIndex(
-                layer =>
-                    !layer.empty
-            );
-
-
-        if (
-            activeIndex === -1
-        ) {
-
-            return false;
-        }
-
-
-        return this.layers
-            .slice(activeIndex + 1)
-            .some(
-                layer =>
-                    !layer.empty
-            );
     }
 
 
@@ -339,6 +394,7 @@ class Compartment {
             triplesRequired;
 
         this.updateLockedVisual();
+
     }
 
 
@@ -351,16 +407,23 @@ class Compartment {
         this.triplesCompleted = 0;
 
         this.updateLockedVisual();
+
     }
 
 
     registerTriple() {
 
+        if (!this.locked) {
+
+            return false;
+
+        }
+
+
         this.triplesCompleted++;
 
 
         if (
-            this.locked &&
             this.triplesCompleted >=
             this.unlockAfterTriples
         ) {
@@ -368,10 +431,12 @@ class Compartment {
             this.unlock();
 
             return true;
+
         }
 
 
         return false;
+
     }
 
 
@@ -382,6 +447,7 @@ class Compartment {
         ) {
 
             return;
+
         }
 
 
@@ -389,7 +455,9 @@ class Compartment {
             "lockedShelf",
             this.locked
         );
+
     }
+
 }
 
 
@@ -415,14 +483,12 @@ class GameModel {
 
         this.lastTripleTime = 0;
 
-        this.remainingTime =
-            CONFIG.TIEMPO_INICIAL;
+        this.remainingTime = 30;
 
         this.running = false;
 
         this.gameOver = false;
 
-        this.moves = 0;
     }
 
 
@@ -438,7 +504,6 @@ class GameModel {
 
         this.gameOver = false;
 
-        this.moves = 0;
     }
 
 
@@ -449,6 +514,7 @@ class GameModel {
         );
 
         return compartment;
+
     }
 
 
@@ -459,6 +525,7 @@ class GameModel {
         );
 
         return object;
+
     }
 
 
@@ -468,44 +535,44 @@ class GameModel {
             object =>
                 !object.removed
         );
+
     }
 
 
     hasObjects() {
 
         return (
-            this.activeObjects()
-                .length > 0
+            this.activeObjects().length > 0
         );
+
     }
 
 
     registerTriple() {
 
-        const now =
-            Date.now();
+        const now = Date.now();
 
 
         if (
-            now -
-            this.lastTripleTime
-            <= CONFIG.VENTANA_COMBO
+            this.lastTripleTime > 0 &&
+            now - this.lastTripleTime
+                <= CONFIG.VENTANA_COMBO
         ) {
 
             this.combo++;
-        }
 
-        else {
+        } else {
 
             this.combo = 1;
+
         }
 
 
-        this.lastTripleTime =
-            now;
+        this.lastTripleTime = now;
 
 
         return this.combo;
+
     }
 
 
@@ -514,13 +581,11 @@ class GameModel {
         this.combo = 0;
 
         this.lastTripleTime = 0;
+
     }
+
 }
 
-
-/* ============================================================
-   INSTANCIA GLOBAL
-   ============================================================ */
 
 const GAME_MODEL =
     new GameModel();

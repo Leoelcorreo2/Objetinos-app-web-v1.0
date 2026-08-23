@@ -4,12 +4,17 @@
    ============================================================ */
 
 
+/* ============================================================
+   OBTENER TIPO
+   ============================================================ */
+
 function getObjectType(typeId) {
 
     return TIPOS_OBJETOS.find(
-        type =>
-            type.id === typeId
+        tipo =>
+            tipo.id === typeId
     );
+
 }
 
 
@@ -26,11 +31,12 @@ function createGameObject(typeId) {
     if (!tipo) {
 
         console.error(
-            "Tipo de objeto inexistente:",
+            "Tipo de objeto no encontrado:",
             typeId
         );
 
         return null;
+
     }
 
 
@@ -44,25 +50,7 @@ function createGameObject(typeId) {
 
 
     return object;
-}
 
-
-/* ============================================================
-   OBJETO ALEATORIO
-   ============================================================ */
-
-function createRandomObject() {
-
-    const index =
-        Math.floor(
-            Math.random() *
-            TIPOS_OBJETOS.length
-        );
-
-
-    return createGameObject(
-        TIPOS_OBJETOS[index].id
-    );
 }
 
 
@@ -83,14 +71,20 @@ function placeObject(
     ) {
 
         return false;
+
     }
 
+
+    /*
+     * Un estante bloqueado no admite objetos.
+     */
 
     if (
         compartment.locked
     ) {
 
         return false;
+
     }
 
 
@@ -100,6 +94,11 @@ function placeObject(
         );
 
 
+    /*
+     * IMPORTANTE:
+     * el slot debe estar libre.
+     */
+
     if (
         !layer.addTo(
             slot,
@@ -108,6 +107,7 @@ function placeObject(
     ) {
 
         return false;
+
     }
 
 
@@ -122,6 +122,65 @@ function placeObject(
 
 
     return true;
+
+}
+
+
+/* ============================================================
+   COLOCAR EN PRIMER HUECO LIBRE
+   ============================================================ */
+
+function placeObjectFirstFree(
+    object,
+    compartment,
+    layerIndex = 0
+) {
+
+    if (
+        !object ||
+        !compartment
+    ) {
+
+        return false;
+
+    }
+
+
+    if (
+        compartment.locked
+    ) {
+
+        return false;
+
+    }
+
+
+    const layer =
+        compartment.ensureLayer(
+            layerIndex
+        );
+
+
+    const slot =
+        layer.firstFreeSlot();
+
+
+    if (
+        slot === -1
+    ) {
+
+        return false;
+
+    }
+
+
+    return placeObject(
+        object,
+        compartment,
+        layerIndex,
+        slot
+    );
+
 }
 
 
@@ -136,6 +195,7 @@ function removeObjectFromBoard(
     if (!object) {
 
         return null;
+
     }
 
 
@@ -147,6 +207,7 @@ function removeObjectFromBoard(
         object.layer.removeFrom(
             object.slot
         );
+
     }
 
 
@@ -158,54 +219,27 @@ function removeObjectFromBoard(
 
 
     return object;
+
 }
 
 
 /* ============================================================
-   OBTENER OBJETO DESDE ELEMENTO
-   ============================================================ */
-
-function objectFromElement(
-    element
-) {
-
-    if (!element) {
-
-        return null;
-    }
-
-
-    const id =
-        element.dataset.objectId;
-
-
-    if (!id) {
-
-        return null;
-    }
-
-
-    return GAME_MODEL
-        .activeObjects()
-        .find(
-            object =>
-                object.id === id
-        ) || null;
-}
-
-
-/* ============================================================
-   CREAR ELEMENTO VISUAL
+   ELEMENTO HTML
    ============================================================ */
 
 function createObjectElement(
     object
 ) {
 
+    if (!object) {
+
+        return null;
+
+    }
+
+
     const element =
-        document.createElement(
-            "div"
-        );
+        document.createElement("div");
 
 
     element.className =
@@ -231,11 +265,47 @@ function createObjectElement(
 
 
     return element;
+
 }
 
 
 /* ============================================================
-   ¿ES OBJETO DE LA CAPA FRONTAL?
+   OBJETO DESDE HTML
+   ============================================================ */
+
+function objectFromElement(
+    element
+) {
+
+    if (!element) {
+
+        return null;
+
+    }
+
+
+    const id =
+        element.dataset.objectId;
+
+
+    if (!id) {
+
+        return null;
+
+    }
+
+
+    return GAME_MODEL.objects.find(
+        object =>
+            object.id === id &&
+            !object.removed
+    ) || null;
+
+}
+
+
+/* ============================================================
+   ¿ES CAPA FRONTAL?
    ============================================================ */
 
 function isObjectFront(
@@ -249,6 +319,7 @@ function isObjectFront(
     ) {
 
         return false;
+
     }
 
 
@@ -257,6 +328,7 @@ function isObjectFront(
             .activeLayer() ===
         object.layer
     );
+
 }
 
 
@@ -274,19 +346,12 @@ function updateObjectVisualState(
     ) {
 
         return;
+
     }
 
 
     const front =
-        isObjectFront(
-            object
-        );
-
-
-    object.element.classList.toggle(
-        "front",
-        front
-    );
+        isObjectFront(object);
 
 
     object.element.classList.toggle(
@@ -295,20 +360,12 @@ function updateObjectVisualState(
     );
 
 
-    if (
+    object.element.style.pointerEvents =
         front &&
         !object.compartment.locked
-    ) {
+            ? "auto"
+            : "none";
 
-        object.element.style.pointerEvents =
-            "auto";
-    }
-
-    else {
-
-        object.element.style.pointerEvents =
-            "none";
-    }
 }
 
 
@@ -324,19 +381,39 @@ function renderObject(
         !object ||
         !object.element ||
         !object.compartment ||
-        object.slot === null
+        !object.layer
     ) {
 
         return;
+
     }
 
 
     const cells =
         object.compartment.element
-            .querySelectorAll(
-                ".cell"
-            );
+            .querySelectorAll(".cell");
 
+
+    if (
+        cells.length < 3
+    ) {
+
+        console.error(
+            "El estante no tiene 3 huecos."
+        );
+
+        return;
+
+    }
+
+
+    /*
+     * MUY IMPORTANTE:
+     *
+     * object.slot es SIEMPRE 0, 1 o 2.
+     *
+     * No utilizamos una posición global.
+     */
 
     const cell =
         cells[object.slot];
@@ -345,8 +422,14 @@ function renderObject(
     if (!cell) {
 
         return;
+
     }
 
+
+    /*
+     * El objeto debe estar dentro
+     * del hueco correspondiente.
+     */
 
     if (
         object.element.parentElement !== cell
@@ -355,26 +438,17 @@ function renderObject(
         cell.appendChild(
             object.element
         );
+
     }
 
 
     const front =
-        isObjectFront(
-            object
-        );
-
-
-    const layerIndex =
-        object.layer
-            ? object.layer.index
-            : 0;
+        isObjectFront(object);
 
 
     object.element.style.setProperty(
         "--z",
-        front
-            ? 50
-            : 10 - layerIndex
+        front ? 30 : 10
     );
 
 
@@ -382,7 +456,7 @@ function renderObject(
         "--bottom",
         front
             ? "4px"
-            : `${8 + layerIndex * 8}px`
+            : "12px"
     );
 
 
@@ -397,6 +471,7 @@ function renderObject(
     updateObjectVisualState(
         object
     );
+
 }
 
 
@@ -406,17 +481,34 @@ function renderObject(
 
 function renderAllObjects() {
 
-    GAME_MODEL
-        .activeObjects()
+    GAME_MODEL.activeObjects()
         .forEach(
             object =>
                 renderObject(object)
         );
+
 }
 
 
 /* ============================================================
-   CREAR Y COLOCAR
+   ACTUALIZAR CAPAS
+   ============================================================ */
+
+function updateAllObjectStates() {
+
+    GAME_MODEL.activeObjects()
+        .forEach(
+            object =>
+                updateObjectVisualState(
+                    object
+                )
+        );
+
+}
+
+
+/* ============================================================
+   CREAR + COLOCAR
    ============================================================ */
 
 function createAndPlaceObject(
@@ -435,21 +527,25 @@ function createAndPlaceObject(
     if (!object) {
 
         return null;
+
     }
 
 
-    if (
-        !placeObject(
+    const placed =
+        placeObject(
             object,
             compartment,
             layerIndex,
             slot
-        )
-    ) {
+        );
+
+
+    if (!placed) {
 
         object.removed = true;
 
         return null;
+
     }
 
 
@@ -463,60 +559,20 @@ function createAndPlaceObject(
     );
 
 
-    animateObjectSpawn(
-        object
-    );
-
-
-    return object;
-}
-
-
-/* ============================================================
-   ANIMACIÓN DE APARICIÓN
-   ============================================================ */
-
-function animateObjectSpawn(
-    object
-) {
-
     if (
-        !object ||
-        !object.element
+        typeof animateObjectSpawn ===
+        "function"
     ) {
 
-        return;
+        animateObjectSpawn(
+            object
+        );
+
     }
 
 
-    object.element.classList.remove(
-        "spawn"
-    );
+    return object;
 
-
-    void object.element.offsetWidth;
-
-
-    object.element.classList.add(
-        "spawn"
-    );
-
-
-    setTimeout(
-        () => {
-
-            if (
-                object.element
-            ) {
-
-                object.element.classList.remove(
-                    "spawn"
-                );
-            }
-
-        },
-        CONFIG.DURACION_SPAWN
-    );
 }
 
 
@@ -531,23 +587,28 @@ function markObjectRemoved(
     if (!object) {
 
         return;
+
     }
 
 
     object.removed = true;
 
 
-    if (object.element) {
+    if (
+        object.element
+    ) {
 
         object.element.classList.add(
             "removing"
         );
+
     }
 
 
     removeObjectFromBoard(
         object
     );
+
 }
 
 
@@ -565,6 +626,7 @@ function removeTripleObjects(
     ) {
 
         return;
+
     }
 
 
@@ -585,18 +647,33 @@ function removeTripleObjects(
                     ) {
 
                         object.element.remove();
+
                     }
+
                 }
             );
 
+
+            /*
+             * Al desaparecer objetos,
+             * las capas posteriores pasan
+             * automáticamente a ser frontales.
+             */
+
+            updateAllObjectStates();
+
+            renderAllObjects();
+
         },
+
         CONFIG.DURACION_ELIMINACION
     );
+
 }
 
 
 /* ============================================================
-   OBJETOS DE LA CAPA FRONTAL
+   OBJETOS FRONTALES
    ============================================================ */
 
 function getFrontObjects(
@@ -606,6 +683,7 @@ function getFrontObjects(
     if (!compartment) {
 
         return [];
+
     }
 
 
@@ -616,8 +694,10 @@ function getFrontObjects(
     if (!layer) {
 
         return [];
+
     }
 
 
     return layer.objects();
+
 }

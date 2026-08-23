@@ -1,17 +1,20 @@
 /* ============================================================
    OBJETINOS CONTRARELOJ
    INTERACCIÓN
+   V1.4.1
    ============================================================ */
+
 
 let draggedObject = null;
 
 let dragStartX = 0;
-
 let dragStartY = 0;
+
+let dragPointerId = null;
 
 
 /* ============================================================
-   INICIALIZAR
+   INICIALIZAR INTERACCIÓN
    ============================================================ */
 
 function initInteraction() {
@@ -21,23 +24,21 @@ function initInteraction() {
         handlePointerDown
     );
 
-
     document.addEventListener(
         "pointermove",
         handlePointerMove
     );
-
 
     document.addEventListener(
         "pointerup",
         handlePointerUp
     );
 
-
     document.addEventListener(
         "pointercancel",
         handlePointerUp
     );
+
 }
 
 
@@ -45,27 +46,16 @@ function initInteraction() {
    POINTER DOWN
    ============================================================ */
 
-function handlePointerDown(
-    event
-) {
-
-    if (
-        !GAME_MODEL.running
-    ) {
-
-        return;
-    }
-
+function handlePointerDown(event) {
 
     const element =
-        event.target.closest(
-            ".obj"
-        );
+        event.target.closest(".obj");
 
 
     if (!element) {
 
         return;
+
     }
 
 
@@ -78,21 +68,21 @@ function handlePointerDown(
     if (!object) {
 
         return;
+
     }
 
 
     /*
-     * Solo podemos mover objetos
-     * de la capa frontal.
+     * Solo se puede mover
+     * la capa frontal.
      */
 
     if (
-        !isObjectFront(
-            object
-        )
+        !isObjectFront(object)
     ) {
 
         return;
+
     }
 
 
@@ -101,11 +91,19 @@ function handlePointerDown(
     ) {
 
         return;
+
     }
+
+
+    event.preventDefault();
 
 
     draggedObject =
         object;
+
+
+    dragPointerId =
+        event.pointerId;
 
 
     dragStartX =
@@ -120,25 +118,19 @@ function handlePointerDown(
         true;
 
 
-    element.classList.add(
-        "dragging"
-    );
+    object.element
+        .classList
+        .add("dragging");
 
 
     try {
 
-        element.setPointerCapture(
+        object.element.setPointerCapture(
             event.pointerId
         );
 
-    }
+    } catch (e) {}
 
-    catch (error) {
-        /* Algunos navegadores pueden no permitirlo */
-    }
-
-
-    event.preventDefault();
 }
 
 
@@ -146,17 +138,28 @@ function handlePointerDown(
    POINTER MOVE
    ============================================================ */
 
-function handlePointerMove(
-    event
-) {
+function handlePointerMove(event) {
 
     if (
-        !draggedObject ||
-        !draggedObject.element
+        !draggedObject
     ) {
 
         return;
+
     }
+
+
+    if (
+        dragPointerId !==
+        event.pointerId
+    ) {
+
+        return;
+
+    }
+
+
+    event.preventDefault();
 
 
     const dx =
@@ -169,19 +172,21 @@ function handlePointerMove(
         dragStartY;
 
 
-    draggedObject.element.style.setProperty(
-        "--dx",
-        `${dx}px`
-    );
+    draggedObject.element
+        .style
+        .setProperty(
+            "--drag-x",
+            `${dx}px`
+        );
 
 
-    draggedObject.element.style.setProperty(
-        "--drag-y",
-        `${dy}px`
-    );
+    draggedObject.element
+        .style
+        .setProperty(
+            "--drag-y",
+            `${dy}px`
+        );
 
-
-    event.preventDefault();
 }
 
 
@@ -189,166 +194,355 @@ function handlePointerMove(
    POINTER UP
    ============================================================ */
 
-function handlePointerUp(
-    event
-) {
+function handlePointerUp(event) {
 
     if (
         !draggedObject
     ) {
 
         return;
+
     }
+
+
+    if (
+        dragPointerId !==
+        event.pointerId
+    ) {
+
+        return;
+
+    }
+
+
+    event.preventDefault();
 
 
     const object =
         draggedObject;
 
 
-    draggedObject =
-        null;
+    const element =
+        object.element;
+
+
+    /*
+     * Quitamos el desplazamiento visual.
+     */
+
+    element.style.removeProperty(
+        "--drag-x"
+    );
+
+    element.style.removeProperty(
+        "--drag-y"
+    );
 
 
     object.dragging =
         false;
 
 
-    if (
-        object.element
-    ) {
+    element.classList.remove(
+        "dragging"
+    );
 
-        object.element.classList.remove(
-            "dragging"
-        );
 
-        object.element.style.removeProperty(
-            "--dx"
-        );
+    draggedObject = null;
 
-        object.element.style.removeProperty(
-            "--drag-y"
-        );
-    }
+    dragPointerId = null;
 
 
     /*
-     * Buscar el hueco bajo el puntero.
+     * Buscamos el hueco sobre el
+     * que se ha soltado.
      */
 
-    const target =
-        document.elementFromPoint(
+    const destination =
+        findDropTarget(
             event.clientX,
-            event.clientY
+            event.clientY,
+            object
         );
 
 
-    const cell =
-        target
-            ? target.closest(
-                ".cell"
-            )
-            : null;
-
-
-    if (!cell) {
+    if (!destination) {
 
         animateReturn(
             object
         );
 
         return;
+
     }
 
 
-    const result =
-        findCellData(
-            cell
-        );
-
-
-    if (!result) {
-
-        animateReturn(
-            object
-        );
-
-        return;
-    }
-
-
-    moveObjectToCell(
+    moveObjectToTarget(
         object,
-        result.compartment,
-        result.slot
+        destination
     );
+
 }
 
 
 /* ============================================================
-   DATOS DE HUECO
+   BUSCAR DESTINO
    ============================================================ */
 
-function findCellData(
-    cell
+function findDropTarget(
+    x,
+    y,
+    object
 ) {
 
-    const compartmentElement =
-        cell.closest(
-            ".compartment"
-        );
-
-
-    if (
-        !compartmentElement
-    ) {
-
-        return null;
-    }
-
-
-    const compartment =
-        GAME_MODEL
-            .compartments
-            .find(
-                item =>
-                    item.element ===
-                    compartmentElement
-            );
-
-
-    if (!compartment) {
-
-        return null;
-    }
-
-
     const cells =
-        [
-            ...compartmentElement
-                .querySelectorAll(
-                    ".cell"
-                )
-        ];
-
-
-    const slot =
-        cells.indexOf(
-            cell
+        Array.from(
+            document.querySelectorAll(
+                ".cell"
+            )
         );
 
 
-    if (
-        slot < 0
-    ) {
+    let best = null;
 
-        return null;
-    }
+    let bestDistance =
+        Infinity;
 
 
-    return {
-        compartment,
-        slot
-    };
+    cells.forEach(
+        cell => {
+
+            const rect =
+                cell.getBoundingClientRect();
+
+
+            /*
+             * Distancia al centro del hueco.
+             */
+
+            const centerX =
+                rect.left +
+                rect.width / 2;
+
+
+            const centerY =
+                rect.top +
+                rect.height / 2;
+
+
+            const distance =
+                Math.hypot(
+                    x - centerX,
+                    y - centerY
+                );
+
+
+            /*
+             * Solo consideramos el hueco
+             * si el dedo/cursor está dentro
+             * de él o muy cerca.
+             */
+
+            const tolerance =
+                Math.max(
+                    rect.width,
+                    rect.height
+                ) * 0.65;
+
+
+            if (
+                distance >
+                tolerance
+            ) {
+
+                return;
+
+            }
+
+
+            /*
+             * Obtener estante.
+             */
+
+            const compartmentElement =
+                cell.closest(
+                    ".compartment"
+                );
+
+
+            if (
+                !compartmentElement
+            ) {
+
+                return;
+
+            }
+
+
+            const compartmentIndex =
+                Array.from(
+                    document.querySelectorAll(
+                        ".compartment"
+                    )
+                ).indexOf(
+                    compartmentElement
+                );
+
+
+            const compartment =
+                GAME_MODEL
+                    .compartments[
+                        compartmentIndex
+                    ];
+
+
+            if (!compartment) {
+
+                return;
+
+            }
+
+
+            /*
+             * Estante bloqueado.
+             */
+
+            if (
+                compartment.locked
+            ) {
+
+                return;
+
+            }
+
+
+            /*
+             * Averiguar el número de hueco.
+             *
+             * Esto es MUY IMPORTANTE.
+             */
+
+            const slot =
+                Array.from(
+                    compartmentElement
+                        .querySelectorAll(
+                            ".cell"
+                        )
+                ).indexOf(
+                    cell
+                );
+
+
+            if (
+                slot < 0 ||
+                slot > 2
+            ) {
+
+                return;
+
+            }
+
+
+            /*
+             * La capa frontal es la única
+             * que puede recibir objetos.
+             */
+
+            const layer =
+                compartment.activeLayer();
+
+
+            if (!layer) {
+
+                /*
+                 * Estante completamente vacío:
+                 * creamos la primera capa.
+                 */
+
+                const newLayer =
+                    compartment.ensureLayer(
+                        0
+                    );
+
+
+                if (
+                    newLayer.hasObjectAt(
+                        slot
+                    )
+                ) {
+
+                    return;
+
+                }
+
+            }
+
+            else {
+
+                /*
+                 * Si existe capa frontal,
+                 * comprobamos el hueco concreto.
+                 */
+
+                if (
+                    layer.hasObjectAt(
+                        slot
+                    )
+                ) {
+
+                    return;
+
+                }
+
+            }
+
+
+            /*
+             * No permitimos soltar el objeto
+             * exactamente sobre sí mismo.
+             */
+
+            if (
+                object.compartment ===
+                    compartment &&
+                object.slot === slot
+            ) {
+
+                return;
+
+            }
+
+
+            if (
+                distance <
+                bestDistance
+            ) {
+
+                bestDistance =
+                    distance;
+
+
+                best = {
+
+                    compartment:
+                        compartment,
+
+                    slot:
+                        slot,
+
+                    cell:
+                        cell
+
+                };
+
+            }
+
+        }
+    );
+
+
+    return best;
+
 }
 
 
@@ -356,62 +550,20 @@ function findCellData(
    MOVER OBJETO
    ============================================================ */
 
-function moveObjectToCell(
+function moveObjectToTarget(
     object,
-    targetCompartment,
-    targetSlot
+    target
 ) {
 
     if (
         !object ||
-        !targetCompartment
+        !target
     ) {
 
         return false;
+
     }
 
-
-    if (
-        targetCompartment.locked
-    ) {
-
-        animateReturn(
-            object
-        );
-
-        return false;
-    }
-
-
-    /*
-     * No permitimos colocar en un hueco ocupado.
-     */
-
-    const targetLayer =
-        targetCompartment
-            .activeLayer()
-        ||
-        targetCompartment
-            .ensureLayer(0);
-
-
-    if (
-        targetLayer.hasObjectAt(
-            targetSlot
-        )
-    ) {
-
-        animateReturn(
-            object
-        );
-
-        return false;
-    }
-
-
-    /*
-     * Guardamos la posición antigua.
-     */
 
     const oldCompartment =
         object.compartment;
@@ -426,15 +578,15 @@ function moveObjectToCell(
 
 
     /*
-     * Si el movimiento es dentro del mismo
-     * estante, no permitimos cambiar de
-     * hueco si la lógica pudiera generar
-     * situaciones extrañas.
+     * Si el destino es el mismo,
+     * no hacemos nada.
      */
 
     if (
         oldCompartment ===
-            targetCompartment
+            target.compartment &&
+        oldSlot ===
+            target.slot
     ) {
 
         animateReturn(
@@ -442,11 +594,43 @@ function moveObjectToCell(
         );
 
         return false;
+
     }
 
 
     /*
-     * Quitar de la posición antigua.
+     * Capa frontal del destino.
+     */
+
+    const destinationLayer =
+        target.compartment.activeLayer()
+        ||
+        target.compartment.ensureLayer(0);
+
+
+    /*
+     * Comprobar que el hueco
+     * sigue libre.
+     */
+
+    if (
+        destinationLayer.hasObjectAt(
+            target.slot
+        )
+    ) {
+
+        animateReturn(
+            object
+        );
+
+        return false;
+
+    }
+
+
+    /*
+     * QUITAMOS primero el objeto
+     * de su posición anterior.
      */
 
     if (
@@ -457,25 +641,30 @@ function moveObjectToCell(
         oldLayer.removeFrom(
             oldSlot
         );
+
     }
 
 
     /*
-     * Colocar en destino.
+     * Colocamos en el hueco exacto.
      */
 
-    if (
-        !targetLayer.addTo(
-            targetSlot,
+    const placed =
+        destinationLayer.addTo(
+            target.slot,
             object
-        )
-    ) {
+        );
+
+
+    if (!placed) {
 
         /*
-         * Restaurar si falla.
+         * Si algo falla,
+         * lo devolvemos a su posición.
          */
 
         if (
+            oldCompartment &&
             oldLayer &&
             oldSlot !== null
         ) {
@@ -493,6 +682,7 @@ function moveObjectToCell(
 
             object.slot =
                 oldSlot;
+
         }
 
 
@@ -501,38 +691,49 @@ function moveObjectToCell(
         );
 
         return false;
+
     }
 
 
-    object.compartment =
-        targetCompartment;
+    /*
+     * Actualizamos referencias.
+     */
 
+    object.compartment =
+        target.compartment;
 
     object.layer =
-        targetLayer;
-
+        destinationLayer;
 
     object.slot =
-        targetSlot;
-
-
-    GAME_MODEL.moves++;
-
-
-    renderAllObjects();
+        target.slot;
 
 
     /*
-     * NO emitimos sonido por mover.
+     * Render.
      */
 
+    renderObject(
+        object
+    );
+
+
+    updateAllObjectStates();
+
+
+    /*
+     * Ahora comprobamos si se ha formado
+     * un trío.
+     */
 
     checkForTriple(
-        targetCompartment
+        destinationLayer,
+        target.compartment
     );
 
 
     return true;
+
 }
 
 
@@ -541,22 +742,17 @@ function moveObjectToCell(
    ============================================================ */
 
 function checkForTriple(
+    layer,
     compartment
 ) {
 
-    if (!compartment) {
+    if (
+        !layer ||
+        !compartment
+    ) {
 
         return;
-    }
 
-
-    const layer =
-        compartment.activeLayer();
-
-
-    if (!layer) {
-
-        return;
     }
 
 
@@ -565,6 +761,7 @@ function checkForTriple(
     ) {
 
         return;
+
     }
 
 
@@ -572,28 +769,12 @@ function checkForTriple(
         layer.getTriple();
 
 
-    processTriple(
-        compartment,
-        triple
-    );
-}
-
-
-/* ============================================================
-   PROCESAR TRÍO
-   ============================================================ */
-
-function processTriple(
-    compartment,
-    triple
-) {
-
     if (
-        !triple ||
         triple.length !== 3
     ) {
 
         return;
+
     }
 
 
@@ -606,59 +787,79 @@ function processTriple(
 
 
     /*
+     * Registrar trío en el estante
+     * por si algún día está bloqueado.
+     */
+
+    compartment.registerTriple();
+
+
+    /*
      * Puntuación.
      */
 
-    const multiplier =
-        CONFIG.MULTIPLICADOR_COMBO
-            ? Math.max(
-                1,
-                combo
-            )
-            : 1;
-
-
     GAME_MODEL.score +=
         CONFIG.PUNTOS_TRIO *
-        multiplier;
+        Math.max(
+            1,
+            combo
+        );
 
 
     GAME_MODEL.coins +=
         CONFIG.MONEDAS_TRIO *
-        multiplier;
+        Math.max(
+            1,
+            combo
+        );
 
 
     /*
      * Efectos.
      */
 
-    showTripleEffect(
-        triple
-    );
+    if (
+        typeof showTripleEffect ===
+        "function"
+    ) {
+
+        showTripleEffect(
+            triple,
+            combo
+        );
+
+    }
 
 
     if (
-        combo > 1
+        combo > 1 &&
+        typeof showCombo ===
+        "function"
     ) {
 
         showCombo(
             combo
         );
 
-        playComboSound(
-            combo
-        );
-
-    }
-
-    else {
-
-        playTripleSound();
     }
 
 
     /*
-     * Eliminar.
+     * Sonido SOLO al formar trío.
+     */
+
+    if (
+        typeof playTripleSound ===
+        "function"
+    ) {
+
+        playTripleSound();
+
+    }
+
+
+    /*
+     * Eliminación.
      */
 
     removeTripleObjects(
@@ -667,42 +868,58 @@ function processTriple(
 
 
     /*
-     * La capa queda vacía.
-     *
-     * NO eliminamos la capa del modelo.
-     *
-     * Simplemente renderizamos de nuevo
-     * para que la siguiente capa pueda
-     * pasar a ser frontal.
+     * Actualizar interfaz.
+
+     */
+
+    if (
+        typeof updateInterface ===
+        "function"
+    ) {
+
+        updateInterface();
+
+    }
+
+
+    /*
+     * Comprobar victoria después
+     * de la animación.
      */
 
     setTimeout(
         () => {
 
+            updateAllObjectStates();
+
             renderAllObjects();
 
-            updateInterface();
-
-
-            /*
-             * Comprobar victoria.
-             */
 
             if (
                 !GAME_MODEL.hasObjects()
             ) {
 
-                winLevel();
+                if (
+                    typeof levelCompleted ===
+                    "function"
+                ) {
+
+                    levelCompleted();
+
+                }
+
             }
 
         },
-        CONFIG.DURACION_ELIMINACION + 20
+
+        CONFIG.DURACION_ELIMINACION + 30
     );
+
 }
 
 
 /* ============================================================
-   VOLVER A LA POSICIÓN
+   ANIMAR REGRESO
    ============================================================ */
 
 function animateReturn(
@@ -715,12 +932,13 @@ function animateReturn(
     ) {
 
         return;
+
     }
 
 
-    object.element.classList.add(
-        "returning"
-    );
+    object.element
+        .classList
+        .add("returning");
 
 
     setTimeout(
@@ -730,12 +948,17 @@ function animateReturn(
                 object.element
             ) {
 
-                object.element.classList.remove(
-                    "returning"
-                );
+                object.element
+                    .classList
+                    .remove(
+                        "returning"
+                    );
+
             }
 
         },
+
         CONFIG.DURACION_REGRESO
     );
+
 }

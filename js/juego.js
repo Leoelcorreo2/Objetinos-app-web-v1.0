@@ -1,84 +1,85 @@
 /* ============================================================
    OBJETINOS CONTRARELOJ
-   MOTOR PRINCIPAL
+   JUEGO
+   V1.4.1
+   ============================================================ */
+
+
+/* ============================================================
+   TIMER
    ============================================================ */
 
 let gameTimer = null;
 
 
 /* ============================================================
-   INICIALIZACIÓN
-   ============================================================ */
-
-document.addEventListener(
-    "DOMContentLoaded",
-    () => {
-
-        initInteraction();
-
-        updateInterface();
-
-        showHomeScreen();
-
-    }
-);
-
-
-/* ============================================================
-   COMENZAR JUEGO
+   INICIAR JUEGO
    ============================================================ */
 
 function startGame() {
 
-    hideHomeScreen();
-
-    GAME_MODEL.level = 1;
-
-    GAME_MODEL.score = 0;
-
-    GAME_MODEL.coins = 0;
-
-    GAME_MODEL.running = true;
-
-    GAME_MODEL.gameOver = false;
+    stopTimer();
 
 
-    if (
-        !generateLevel(
-            GAME_MODEL.level
-        )
-    ) {
+    const level =
+        GAME_MODEL.level || 1;
 
-        console.error(
-            "No se pudo generar el nivel."
-        );
+
+    try {
+
+        const config =
+            generateLevel(
+                level
+            );
+
 
         GAME_MODEL.running =
+            true;
+
+
+        GAME_MODEL.gameOver =
             false;
 
-        return;
+
+        GAME_MODEL.remainingTime =
+            config.tiempo;
+
+
+        updateInterface();
+
+
+        startTimer();
+
+
+        /*
+         * IMPORTANTE:
+         *
+         * La interacción se inicializa
+         * una sola vez.
+         */
+
     }
 
+    catch (error) {
 
-    updateInterface();
+        console.error(
+            "ERROR GENERANDO NIVEL:",
+            error
+        );
 
 
-    startTimer();
+        alert(
+            "Error al generar el nivel. " +
+            "Mira la consola del navegador."
+        );
 
+    }
 
-    setTimeout(
-        () => {
-
-            showTutorial();
-
-        },
-        500
-    );
 }
 
 
 /* ============================================================
-   TEMPORIZADOR
+   TIMER
    ============================================================ */
 
 function startTimer() {
@@ -95,6 +96,7 @@ function startTimer() {
                 ) {
 
                     return;
+
                 }
 
 
@@ -108,17 +110,24 @@ function startTimer() {
                     GAME_MODEL.remainingTime <= 0
                 ) {
 
-                    loseLevel();
+                    GAME_MODEL.remainingTime =
+                        0;
+
+
+                    timeOutLevel();
+
                 }
 
             },
+
             1000
         );
+
 }
 
 
 /* ============================================================
-   PARAR TEMPORIZADOR
+   PARAR TIMER
    ============================================================ */
 
 function stopTimer() {
@@ -131,47 +140,64 @@ function stopTimer() {
             gameTimer
         );
 
-        gameTimer =
-            null;
+        gameTimer = null;
+
     }
+
 }
 
 
 /* ============================================================
-   REINICIAR NIVEL
+   TIEMPO AGOTADO
    ============================================================ */
 
-function restartLevel() {
+function timeOutLevel() {
+
+    if (
+        GAME_MODEL.gameOver
+    ) {
+
+        return;
+
+    }
+
+
+    GAME_MODEL.gameOver =
+        true;
+
+    GAME_MODEL.running =
+        false;
+
 
     stopTimer();
 
 
-    GAME_MODEL.running =
-        true;
-
-
-    GAME_MODEL.gameOver =
-        false;
-
-
     if (
-        !generateLevel(
-            GAME_MODEL.level
-        )
+        typeof playDefeatSound ===
+        "function"
     ) {
 
-        console.error(
-            "No se pudo regenerar el nivel."
-        );
+        playDefeatSound();
 
-        return;
     }
 
 
-    updateInterface();
+    const modal =
+        document.getElementById(
+            "levelTimeoutTip"
+        );
 
 
-    startTimer();
+    if (
+        modal
+    ) {
+
+        modal.classList.add(
+            "show"
+        );
+
+    }
+
 }
 
 
@@ -179,19 +205,19 @@ function restartLevel() {
    NIVEL COMPLETADO
    ============================================================ */
 
-function winLevel() {
+function levelCompleted() {
 
     if (
         GAME_MODEL.gameOver
     ) {
 
         return;
+
     }
 
 
     GAME_MODEL.gameOver =
         true;
-
 
     GAME_MODEL.running =
         false;
@@ -200,117 +226,172 @@ function winLevel() {
     stopTimer();
 
 
-    showVictory();
-
-
-    /*
-     * Siguiente nivel después
-     * de una pequeña pausa.
-     */
-
-    setTimeout(
-        () => {
-
-            nextLevel();
-
-        },
-        1600
-    );
-}
-
-
-/* ============================================================
-   SIGUIENTE NIVEL
-   ============================================================ */
-
-function nextLevel() {
-
-    GAME_MODEL.level++;
-
-
-    GAME_MODEL.gameOver =
-        false;
-
-
-    GAME_MODEL.running =
-        true;
-
-
     if (
-        !generateLevel(
-            GAME_MODEL.level
-        )
+        typeof playVictorySound ===
+        "function"
     ) {
 
-        /*
-         * Si todavía no existe configuración
-         * para ese nivel, volvemos al último
-         * nivel disponible.
-         */
+        playVictorySound();
 
-        GAME_MODEL.level =
-            CONFIG_NIVELES[
-                CONFIG_NIVELES.length - 1
-            ].nivel;
-
-
-        generateLevel(
-            GAME_MODEL.level
-        );
     }
+
+
+    GAME_MODEL.level++;
 
 
     updateInterface();
 
 
-    startTimer();
+    setTimeout(
+        () => {
+
+            GAME_MODEL.gameOver =
+                false;
+
+
+            startGame();
+
+        },
+
+        900
+    );
+
 }
 
 
 /* ============================================================
-   DERROTA
+   REINTENTAR NIVEL
    ============================================================ */
 
-function loseLevel() {
+function retryCurrentLevel() {
+
+    const modal =
+        document.getElementById(
+            "levelTimeoutTip"
+        );
+
 
     if (
-        GAME_MODEL.gameOver
+        modal
     ) {
 
-        return;
+        modal.classList.remove(
+            "show"
+        );
+
     }
 
 
     GAME_MODEL.gameOver =
-        true;
+        false;
 
 
     GAME_MODEL.running =
         false;
 
 
-    stopTimer();
+    startGame();
 
-
-    showDefeat();
 }
 
 
 /* ============================================================
-   VICTORIA / DERROTA PÚBLICAS
+   SALIR
    ============================================================ */
 
-window.startGame =
-    startGame;
+function exitGame() {
+
+    stopTimer();
 
 
-window.restartLevel =
-    restartLevel;
+    GAME_MODEL.running =
+        false;
 
 
-window.winLevel =
-    winLevel;
+    GAME_MODEL.gameOver =
+        true;
 
 
-window.loseLevel =
-    loseLevel;
+    const modal =
+        document.getElementById(
+            "levelTimeoutTip"
+        );
+
+
+    if (
+        modal
+    ) {
+
+        modal.classList.remove(
+            "show"
+        );
+
+    }
+
+}
+
+
+/* ============================================================
+   BOTONES
+   ============================================================ */
+
+function initGameButtons() {
+
+    const retry =
+        document.getElementById(
+            "retryLevelBtn"
+        );
+
+
+    if (retry) {
+
+        retry.addEventListener(
+            "click",
+            retryCurrentLevel
+        );
+
+    }
+
+
+    const exit =
+        document.getElementById(
+            "exitLevelBtn"
+        );
+
+
+    if (exit) {
+
+        exit.addEventListener(
+            "click",
+            exitGame
+        );
+
+    }
+
+}
+
+
+/* ============================================================
+   ARRANQUE
+   ============================================================ */
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+
+        initInteraction();
+
+        initGameButtons();
+
+
+        /*
+         * Primer nivel.
+         */
+
+        GAME_MODEL.level = 1;
+
+
+        startGame();
+
+    }
+);

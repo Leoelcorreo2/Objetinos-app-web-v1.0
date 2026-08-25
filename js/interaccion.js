@@ -1,7 +1,7 @@
 /* ============================================================
    OBJETINOS CONTRARELOJ
    INTERACCIÓN
-   V1.4.1
+   V1.4.1 CORREGIDO
    ============================================================ */
 
 
@@ -86,6 +86,11 @@ function handlePointerDown(event) {
     }
 
 
+    /*
+     * Un estante bloqueado
+     * no permite mover objetos.
+     */
+
     if (
         object.compartment.locked
     ) {
@@ -106,6 +111,11 @@ function handlePointerDown(event) {
         event.pointerId;
 
 
+    /*
+     * Guardamos la posición inicial
+     * del puntero.
+     */
+
     dragStartX =
         event.clientX;
 
@@ -118,10 +128,24 @@ function handlePointerDown(event) {
         true;
 
 
+    /*
+     * Marcamos visualmente el objeto
+     * como arrastrado.
+     */
+
     object.element
         .classList
         .add("dragging");
 
+
+    /*
+     * Capturamos el puntero.
+     *
+     * Esto es especialmente importante
+     * en móviles para que el movimiento
+     * siga funcionando aunque el dedo
+     * salga ligeramente del objeto.
+     */
 
     try {
 
@@ -129,7 +153,9 @@ function handlePointerDown(event) {
             event.pointerId
         );
 
-    } catch (e) {}
+    }
+
+    catch (e) {}
 
 }
 
@@ -162,30 +188,56 @@ function handlePointerMove(event) {
     event.preventDefault();
 
 
+    /*
+     * DESPLAZAMIENTO HORIZONTAL
+     * desde el punto donde comenzamos.
+     */
+
     const dx =
         event.clientX -
         dragStartX;
 
+
+    /*
+     * DESPLAZAMIENTO VERTICAL.
+     */
 
     const dy =
         event.clientY -
         dragStartY;
 
 
-    draggedObject.element
-        .style
-        .setProperty(
-            "--drag-x",
-            `${dx}px`
-        );
+    /*
+     * ========================================================
+     * CORRECCIÓN PRINCIPAL
+     * ========================================================
+     *
+     * El CSS utiliza:
+     *
+     *     --dx
+     *
+     * para el desplazamiento horizontal.
+     *
+     * Antes aquí se utilizaba:
+     *
+     *     --drag-x
+     *
+     * que el CSS NO utilizaba.
+     *
+     * Por eso el objeto solo respondía
+     * correctamente en vertical.
+     */
+
+    draggedObject.element.style.setProperty(
+        "--dx",
+        `${dx}px`
+    );
 
 
-    draggedObject.element
-        .style
-        .setProperty(
-            "--drag-y",
-            `${dy}px`
-        );
+    draggedObject.element.style.setProperty(
+        "--drag-y",
+        `${dy}px`
+    );
 
 }
 
@@ -227,11 +279,25 @@ function handlePointerUp(event) {
 
 
     /*
+     * Guardamos la posición de liberación
+     * ANTES de eliminar las variables
+     * visuales del arrastre.
+     */
+
+    const dropX =
+        event.clientX;
+
+
+    const dropY =
+        event.clientY;
+
+
+    /*
      * Quitamos el desplazamiento visual.
      */
 
     element.style.removeProperty(
-        "--drag-x"
+        "--dx"
     );
 
     element.style.removeProperty(
@@ -248,6 +314,29 @@ function handlePointerUp(event) {
     );
 
 
+    /*
+     * Liberamos el pointer capture.
+     */
+
+    try {
+
+        if (
+            element.hasPointerCapture(
+                event.pointerId
+            )
+        ) {
+
+            element.releasePointerCapture(
+                event.pointerId
+            );
+
+        }
+
+    }
+
+    catch (e) {}
+
+
     draggedObject = null;
 
     dragPointerId = null;
@@ -260,11 +349,17 @@ function handlePointerUp(event) {
 
     const destination =
         findDropTarget(
-            event.clientX,
-            event.clientY,
+            dropX,
+            dropY,
             object
         );
 
+
+    /*
+     * No hay hueco válido.
+     *
+     * El objeto vuelve a su posición.
+     */
 
     if (!destination) {
 
@@ -276,6 +371,10 @@ function handlePointerUp(event) {
 
     }
 
+
+    /*
+     * Movimiento definitivo.
+     */
 
     moveObjectToTarget(
         object,
@@ -317,7 +416,7 @@ function findDropTarget(
 
 
             /*
-             * Distancia al centro del hueco.
+             * Centro del hueco.
              */
 
             const centerX =
@@ -338,9 +437,7 @@ function findDropTarget(
 
 
             /*
-             * Solo consideramos el hueco
-             * si el dedo/cursor está dentro
-             * de él o muy cerca.
+             * Tolerancia de colocación.
              */
 
             const tolerance =
@@ -378,6 +475,11 @@ function findDropTarget(
 
             }
 
+
+            /*
+             * Encontramos el índice
+             * del estante dentro del DOM.
+             */
 
             const compartmentIndex =
                 Array.from(
@@ -417,9 +519,11 @@ function findDropTarget(
 
 
             /*
-             * Averiguar el número de hueco.
+             * Número de hueco:
              *
-             * Esto es MUY IMPORTANTE.
+             * 0
+             * 1
+             * 2
              */
 
             const slot =
@@ -445,7 +549,7 @@ function findDropTarget(
 
             /*
              * La capa frontal es la única
-             * que puede recibir objetos.
+             * que recibe objetos.
              */
 
             const layer =
@@ -455,8 +559,9 @@ function findDropTarget(
             if (!layer) {
 
                 /*
-                 * Estante completamente vacío:
-                 * creamos la primera capa.
+                 * Estante completamente vacío.
+                 *
+                 * Creamos su primera capa.
                  */
 
                 const newLayer =
@@ -480,8 +585,8 @@ function findDropTarget(
             else {
 
                 /*
-                 * Si existe capa frontal,
-                 * comprobamos el hueco concreto.
+                 * Comprobamos el hueco
+                 * concreto de la capa frontal.
                  */
 
                 if (
@@ -499,7 +604,7 @@ function findDropTarget(
 
             /*
              * No permitimos soltar el objeto
-             * exactamente sobre sí mismo.
+             * exactamente donde ya estaba.
              */
 
             if (
@@ -512,6 +617,10 @@ function findDropTarget(
 
             }
 
+
+            /*
+             * Elegimos el hueco más cercano.
+             */
 
             if (
                 distance <
@@ -578,8 +687,7 @@ function moveObjectToTarget(
 
 
     /*
-     * Si el destino es el mismo,
-     * no hacemos nada.
+     * Mismo hueco.
      */
 
     if (
@@ -605,12 +713,13 @@ function moveObjectToTarget(
     const destinationLayer =
         target.compartment.activeLayer()
         ||
-        target.compartment.ensureLayer(0);
+        target.compartment.ensureLayer(
+            0
+        );
 
 
     /*
-     * Comprobar que el hueco
-     * sigue libre.
+     * El hueco debe seguir libre.
      */
 
     if (
@@ -629,7 +738,7 @@ function moveObjectToTarget(
 
 
     /*
-     * QUITAMOS primero el objeto
+     * Quitamos primero el objeto
      * de su posición anterior.
      */
 
@@ -646,7 +755,7 @@ function moveObjectToTarget(
 
 
     /*
-     * Colocamos en el hueco exacto.
+     * Colocamos en el nuevo hueco.
      */
 
     const placed =
@@ -656,12 +765,11 @@ function moveObjectToTarget(
         );
 
 
-    if (!placed) {
+    /*
+     * Si falla, restauramos.
+     */
 
-        /*
-         * Si algo falla,
-         * lo devolvemos a su posición.
-         */
+    if (!placed) {
 
         if (
             oldCompartment &&
@@ -674,11 +782,14 @@ function moveObjectToTarget(
                 object
             );
 
+
             object.compartment =
                 oldCompartment;
 
+
             object.layer =
                 oldLayer;
+
 
             object.slot =
                 oldSlot;
@@ -702,15 +813,17 @@ function moveObjectToTarget(
     object.compartment =
         target.compartment;
 
+
     object.layer =
         destinationLayer;
+
 
     object.slot =
         target.slot;
 
 
     /*
-     * Render.
+     * Renderizamos.
      */
 
     renderObject(
@@ -722,8 +835,7 @@ function moveObjectToTarget(
 
 
     /*
-     * Ahora comprobamos si se ha formado
-     * un trío.
+     * Comprobar trío.
      */
 
     checkForTriple(
@@ -787,8 +899,7 @@ function checkForTriple(
 
 
     /*
-     * Registrar trío en el estante
-     * por si algún día está bloqueado.
+     * Registrar trío en el estante.
      */
 
     compartment.registerTriple();
@@ -815,7 +926,7 @@ function checkForTriple(
 
 
     /*
-     * Efectos.
+     * Efectos visuales.
      */
 
     if (
@@ -859,7 +970,7 @@ function checkForTriple(
 
 
     /*
-     * Eliminación.
+     * Eliminar.
      */
 
     removeTripleObjects(
@@ -870,7 +981,7 @@ function checkForTriple(
     /*
      * Actualizar interfaz.
 
-     */
+    */
 
     if (
         typeof updateInterface ===
@@ -883,8 +994,7 @@ function checkForTriple(
 
 
     /*
-     * Comprobar victoria después
-     * de la animación.
+     * Comprobar victoria.
      */
 
     setTimeout(
@@ -934,6 +1044,21 @@ function animateReturn(
         return;
 
     }
+
+
+    /*
+     * Nos aseguramos de eliminar
+     * cualquier desplazamiento residual.
+     */
+
+    object.element.style.removeProperty(
+        "--dx"
+    );
+
+
+    object.element.style.removeProperty(
+        "--drag-y"
+    );
 
 
     object.element

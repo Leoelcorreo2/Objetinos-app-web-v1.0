@@ -358,12 +358,12 @@ header{
 
   z-index:var(--z);
 
-  transform:
-    translate(
-      var(--dx,0px),
-      var(--drag-y,0px)
-    )
-    scale(var(--scale,1));
+transform:
+  translate(
+    var(--dx,0px),
+    var(--drag-y,0px)
+  )
+  scale(var(--scale,1))
 
   transition:
     transform .18s ease,

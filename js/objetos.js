@@ -1,6 +1,7 @@
 /* ============================================================
    OBJETINOS CONTRARELOJ
    OBJETOS
+   V1.4.1 CORREGIDO
    ============================================================ */
 
 
@@ -95,8 +96,7 @@ function placeObject(
 
 
     /*
-     * IMPORTANTE:
-     * el slot debe estar libre.
+     * El slot debe estar libre.
      */
 
     if (
@@ -224,7 +224,19 @@ function removeObjectFromBoard(
 
 
 /* ============================================================
-   ELEMENTO HTML
+   CREAR ELEMENTO HTML DEL OBJETO
+   ============================================================
+
+   IMPORTANTE:
+
+   El objeto se representa SOLO mediante su emoji.
+
+   NO mostramos:
+       apple
+       bread
+       milk
+       etc.
+
    ============================================================ */
 
 function createObjectElement(
@@ -254,9 +266,21 @@ function createObjectElement(
         object.type;
 
 
+    /*
+     * SOLO LA IMAGEN / EMOJI.
+     *
+     * Antes teníamos:
+     *
+     * <span>🍎</span>
+     * <small>apple</small>
+     *
+     * Ahora únicamente:
+     *
+     * <span>🍎</span>
+     */
+
     element.innerHTML = `
         <span>${object.emoji}</span>
-        <small>${object.nombre}</small>
     `;
 
 
@@ -408,11 +432,11 @@ function renderObject(
 
 
     /*
-     * MUY IMPORTANTE:
+     * object.slot siempre es:
      *
-     * object.slot es SIEMPRE 0, 1 o 2.
-     *
-     * No utilizamos una posición global.
+     * 0
+     * 1
+     * 2
      */
 
     const cell =
@@ -428,7 +452,7 @@ function renderObject(
 
     /*
      * El objeto debe estar dentro
-     * del hueco correspondiente.
+     * de su hueco correspondiente.
      */
 
     if (
@@ -446,11 +470,19 @@ function renderObject(
         isObjectFront(object);
 
 
+    /*
+     * PROFUNDIDAD
+     */
+
     object.element.style.setProperty(
         "--z",
         front ? 30 : 10
     );
 
+
+    /*
+     * ALTURA
+     */
 
     object.element.style.setProperty(
         "--bottom",
@@ -460,12 +492,39 @@ function renderObject(
     );
 
 
+    /*
+     * ESCALA
+     */
+
     object.element.style.setProperty(
         "--scale",
         front
             ? "1"
             : ".88"
     );
+
+
+    /*
+     * IMPORTANTE:
+     *
+     * Al terminar de renderizar un objeto
+     * eliminamos cualquier desplazamiento
+     * de arrastre que pudiera haber quedado.
+     */
+
+    if (
+        !object.dragging
+    ) {
+
+        object.element.style.removeProperty(
+            "--dx"
+        );
+
+        object.element.style.removeProperty(
+            "--drag-y"
+        );
+
+    }
 
 
     updateObjectVisualState(
@@ -655,9 +714,8 @@ function removeTripleObjects(
 
 
             /*
-             * Al desaparecer objetos,
-             * las capas posteriores pasan
-             * automáticamente a ser frontales.
+             * Actualizamos el estado visual
+             * de las capas que quedan.
              */
 
             updateAllObjectStates();
@@ -668,36 +726,5 @@ function removeTripleObjects(
 
         CONFIG.DURACION_ELIMINACION
     );
-
-}
-
-
-/* ============================================================
-   OBJETOS FRONTALES
-   ============================================================ */
-
-function getFrontObjects(
-    compartment
-) {
-
-    if (!compartment) {
-
-        return [];
-
-    }
-
-
-    const layer =
-        compartment.activeLayer();
-
-
-    if (!layer) {
-
-        return [];
-
-    }
-
-
-    return layer.objects();
 
 }

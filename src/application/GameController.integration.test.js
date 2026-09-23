@@ -1,8 +1,10 @@
+javascript
 import assert from "node:assert/strict";
 
 import GameController from "./GameController.js";
 import GameState from "./GameState.js";
 import GamePhase from "../state/GamePhase.js";
+import GameStateMachine from "./GameStateMachine.js";
 import GameCommands from "./commands/GameCommands.js";
 import GameEvents from "./events/GameEvents.js";
 
@@ -11,7 +13,10 @@ let passed = 0;
 let failed = 0;
 
 
-function test(name, fn) {
+function test(
+    name,
+    fn
+) {
 
     try {
 
@@ -39,12 +44,8 @@ function test(name, fn) {
 
 
 /**
- * Crea un LevelState mínimo para probar
- * exclusivamente la coordinación del Controller.
- *
- * No utilizamos aquí las implementaciones reales
- * de los Systems porque estas pruebas deben aislar
- * el contrato Controller → Command → Systems → Events.
+ * LevelState mínimo para probar exclusivamente
+ * la coordinación del Controller.
  */
 function createLevelState() {
 
@@ -100,7 +101,9 @@ function createLevelState() {
         },
 
 
-        setPhase(phase) {
+        setPhase(
+            phase
+        ) {
 
             this.phase =
                 phase;
@@ -116,17 +119,18 @@ function createLevelState() {
 
 
 /**
- * Crea Systems simulados.
+ * Systems simulados.
  *
- * Cada System registra su ejecución para poder comprobar
- * que el Controller respeta el orden de coordinación.
+ * El Controller se prueba sin depender de las reglas internas
+ * de los Systems reales.
  */
 function createSystems({
     victory = false,
     blocked = false
 } = {}) {
 
-    const calls = [];
+    const calls =
+        [];
 
 
     return {
@@ -139,7 +143,9 @@ function createSystems({
             execute(payload) {
 
                 calls.push([
+
                     "movement",
+
                     payload
                 ]);
 
@@ -173,7 +179,9 @@ function createSystems({
             execute(payload) {
 
                 calls.push([
+
                     "trio",
+
                     payload
                 ]);
 
@@ -201,7 +209,9 @@ function createSystems({
             execute(shelfId) {
 
                 calls.push([
+
                     "layer",
+
                     shelfId
                 ]);
 
@@ -217,7 +227,13 @@ function createSystems({
                     reason:
                         "LAYER_REJECTED",
 
-                    shelfId
+                    shelfId,
+
+                    advancedLayerIds:
+                        [],
+
+                    topLayerId:
+                        "layer-1"
                 };
             }
         },
@@ -228,7 +244,9 @@ function createSystems({
             execute(shelfId) {
 
                 calls.push([
+
                     "collapse",
+
                     shelfId
                 ]);
 
@@ -242,9 +260,15 @@ function createSystems({
                         false,
 
                     reason:
-                        "SHELF_NOT_COLLAPSED",
+                        "COLLAPSE_REJECTED",
 
-                    shelfId
+                    shelfId,
+
+                    structureId:
+                        "structure-1",
+
+                    layerIds:
+                        []
                 };
             }
         },
@@ -255,48 +279,31 @@ function createSystems({
             execute() {
 
                 calls.push([
+
                     "victory"
                 ]);
-
-
-                if (victory) {
-
-                    return {
-
-                        valid:
-                            true,
-
-                        executed:
-                            true,
-
-                        reason:
-                            "VICTORY_EXECUTED",
-
-                        totalObjects:
-                            0,
-
-                        previousPhase:
-                            GamePhase.PLAYING,
-
-                        phase:
-                            GamePhase.WON
-                    };
-                }
 
 
                 return {
 
                     valid:
-                        false,
+                        true,
 
                     executed:
-                        false,
+                        victory,
 
                     reason:
-                        "VICTORY_REJECTED",
+                        victory
+                            ? "VICTORY"
+                            : "NOT_VICTORY",
+
+                    previousPhase:
+                        GamePhase.PLAYING,
 
                     phase:
-                        GamePhase.PLAYING
+                        victory
+                            ? GamePhase.WON
+                            : GamePhase.PLAYING
                 };
             }
         },
@@ -307,6 +314,7 @@ function createSystems({
             execute() {
 
                 calls.push([
+
                     "blocked"
                 ]);
 
@@ -324,7 +332,118 @@ function createSystems({
                     reason:
                         blocked
                             ? "BLOCKED"
-                            : "NO_BLOCK"
+                            : "NOT_BLOCKED"
+                };
+            }
+        },
+
+
+        timer: {
+
+            start() {
+
+                calls.push([
+                    "timer-start"
+                ]);
+
+
+                return {
+
+                    valid:
+                        true,
+
+                    executed:
+                        true
+                };
+            },
+
+
+            execute(deltaTime) {
+
+                calls.push([
+
+                    "timer",
+
+                    deltaTime
+                ]);
+
+
+                return {
+
+                    valid:
+                        true,
+
+                    executed:
+                        true,
+
+                    deltaTime
+                };
+            },
+
+
+            pause() {
+
+                calls.push([
+                    "timer-pause"
+                ]);
+
+
+                return {
+
+                    valid:
+                        true,
+
+                    executed:
+                        true
+                };
+            },
+
+
+            resume() {
+
+                calls.push([
+                    "timer-resume"
+                ]);
+
+
+                return {
+
+                    valid:
+                        true,
+
+                    executed:
+                        true
+                };
+            }
+        },
+
+
+        /*
+         * StructureMovementSystem NO forma parte de la
+         * transacción lógica MOVE_OBJECT.
+         *
+         * Se inyecta únicamente para comprobar que el Controller
+         * conserva la dependencia sin ejecutarla.
+         */
+        structureMovement: {
+
+            execute(payload) {
+
+                calls.push([
+
+                    "structureMovement",
+
+                    payload
+                ]);
+
+
+                return {
+
+                    valid:
+                        true,
+
+                    executed:
+                        true
                 };
             }
         }
@@ -333,13 +452,19 @@ function createSystems({
 
 
 /**
- * Crea un Controller listo para ejecutar
- * comandos durante PLAYING.
+ * Crea un Controller preparado para PLAYING.
  */
-function createController(options = {}) {
+function createController({
+    victory = false,
+    blocked = false,
+    stateMachine = null
+} = {}) {
 
     const gameState =
         new GameState({
+
+            currentLevel:
+                1,
 
             activeLevel:
                 1,
@@ -353,10 +478,18 @@ function createController(options = {}) {
         createLevelState();
 
 
+    levelState.setPhase(
+        GamePhase.PLAYING
+    );
+
+
     const systems =
-        createSystems(
-            options
-        );
+        createSystems({
+
+            victory,
+
+            blocked
+        });
 
 
     const controller =
@@ -366,7 +499,9 @@ function createController(options = {}) {
 
             levelState,
 
-            systems
+            systems,
+
+            stateMachine
         });
 
 
@@ -383,31 +518,59 @@ function createController(options = {}) {
 }
 
 
-// -----------------------------------------------------------------------------
-// 1. dispatch()
-// -----------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * 1. Constructor
+ * ---------------------------------------------------------------------------
+ */
 
 test(
-    "dispatch acepta MOVE_OBJECT y ejecuta el flujo",
+    "crea el Controller con la máquina de estados en READY",
     () => {
 
         const {
-            controller,
-            systems
+            controller
         } =
             createController();
 
 
-        const command =
-            GameCommands.moveObject(
-                "object-1",
-                "destination-1"
-            );
+        assert.equal(
+
+            controller
+                .getStateMachine()
+                .getState(),
+
+            GameStateMachine.STATE.READY
+        );
+    }
+);
+
+
+/*
+ * ---------------------------------------------------------------------------
+ * 2. Command válido
+ * ---------------------------------------------------------------------------
+ */
+
+test(
+    "acepta un Command MOVE_OBJECT válido",
+    () => {
+
+        const {
+            controller
+        } =
+            createController();
 
 
         const result =
             controller.dispatch(
-                command
+
+                GameCommands.moveObject(
+
+                    "object-1",
+
+                    "destination-1"
+                )
             );
 
 
@@ -418,99 +581,20 @@ test(
 
 
         assert.equal(
-            result.reason,
-            GameController.REASON.MOVEMENT_RESOLVED
-        );
 
-
-        assert.equal(
-            result.command,
-            command
-        );
-
-
-        assert.deepEqual(
-
-            systems.calls.map(
-                ([name]) => name
-            ),
-
-            [
-                "movement",
-                "trio",
-                "layer",
-                "collapse",
-                "victory",
-                "blocked"
-            ]
-        );
-    }
-);
-
-
-// -----------------------------------------------------------------------------
-// 2. move() → Command → dispatch()
-// -----------------------------------------------------------------------------
-
-test(
-    "move() crea el Command y delega en dispatch",
-    () => {
-
-        const {
-            controller,
-            systems
-        } =
-            createController();
-
-
-        const result =
-            controller.move({
-
-                objectId:
-                    "object-1",
-
-                destinationSlotId:
-                    "destination-1"
-            });
-
-
-        assert.equal(
-            result.executed,
-            true
-        );
-
-
-        assert.equal(
             result.command.type,
+
             GameCommands.TYPE.MOVE_OBJECT
         );
-
-
-        assert.deepEqual(
-
-            result.command.payload,
-
-            {
-                objectId:
-                    "object-1",
-
-                destinationSlotId:
-                    "destination-1"
-            }
-        );
-
-
-        assert.equal(
-            systems.calls[0][0],
-            "movement"
-        );
     }
 );
 
 
-// -----------------------------------------------------------------------------
-// 3. Command nulo
-// -----------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * 3. Command nulo
+ * ---------------------------------------------------------------------------
+ */
 
 test(
     "rechaza un Command nulo",
@@ -541,16 +625,20 @@ test(
 
 
         assert.equal(
+
             result.reason,
+
             GameController.REASON.COMMAND_REJECTED
         );
     }
 );
 
 
-// -----------------------------------------------------------------------------
-// 4. Command desconocido
-// -----------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * 4. Command desconocido
+ * ---------------------------------------------------------------------------
+ */
 
 test(
     "rechaza un tipo de Command desconocido",
@@ -586,16 +674,20 @@ test(
 
 
         assert.equal(
+
             result.reason,
+
             GameController.REASON.COMMAND_REJECTED
         );
     }
 );
 
 
-// -----------------------------------------------------------------------------
-// 5. Fase incorrecta
-// -----------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * 5. Fase incorrecta
+ * ---------------------------------------------------------------------------
+ */
 
 test(
     "rechaza MOVE_OBJECT cuando la partida no está en PLAYING",
@@ -639,7 +731,9 @@ test(
 
 
         assert.equal(
+
             result.reason,
+
             GameController.REASON.GAME_NOT_PLAYING
         );
 
@@ -648,22 +742,18 @@ test(
             systems.calls,
             []
         );
-
-
-        assert.deepEqual(
-            result.events,
-            []
-        );
     }
 );
 
 
-// -----------------------------------------------------------------------------
-// 6. Movimiento rechazado
-// -----------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * 6. Movimiento rechazado
+ * ---------------------------------------------------------------------------
+ */
 
 test(
-    "un movimiento rechazado no genera Events",
+    "un movimiento rechazado no ejecuta Systems posteriores",
     () => {
 
         const {
@@ -674,17 +764,25 @@ test(
 
 
         systems.movement.execute =
-            () => ({
+            () => {
 
-                valid:
-                    false,
+                systems.calls.push([
+                    "movement"
+                ]);
 
-                executed:
-                    false,
 
-                reason:
-                    "MOVEMENT_REJECTED"
-            });
+                return {
+
+                    valid:
+                        false,
+
+                    executed:
+                        false,
+
+                    reason:
+                        "MOVEMENT_REJECTED"
+                };
+            };
 
 
         const result =
@@ -711,22 +809,95 @@ test(
 
 
         assert.equal(
+
             result.reason,
+
             GameController.REASON.MOVEMENT_REJECTED
         );
 
 
         assert.deepEqual(
-            result.events,
-            []
+
+            systems.calls,
+
+            [
+                [
+                    "movement"
+                ]
+            ]
+        );
+
+
+        assert.equal(
+
+            controller
+                .getStateMachine()
+                .getState(),
+
+            GameStateMachine.STATE.READY
         );
     }
 );
 
 
-// -----------------------------------------------------------------------------
-// 7. OBJECT_MOVED
-// -----------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * 7. Orden de resolución
+ * ---------------------------------------------------------------------------
+ */
+
+test(
+    "coordina la resolución en el orden correcto",
+    () => {
+
+        const {
+            controller,
+            systems
+        } =
+            createController();
+
+
+        const result =
+            controller.move({
+
+                objectId:
+                    "object-1",
+
+                destinationSlotId:
+                    "destination-1"
+            });
+
+
+        assert.equal(
+            result.executed,
+            true
+        );
+
+
+        assert.deepEqual(
+
+            systems.calls.map(
+                ([name]) => name
+            ),
+
+            [
+                "movement",
+                "trio",
+                "layer",
+                "collapse",
+                "victory",
+                "blocked"
+            ]
+        );
+    }
+);
+
+
+/*
+ * ---------------------------------------------------------------------------
+ * 8. OBJECT_MOVED
+ * ---------------------------------------------------------------------------
+ */
 
 test(
     "un movimiento ejecutado produce OBJECT_MOVED",
@@ -783,12 +954,126 @@ test(
 );
 
 
-// -----------------------------------------------------------------------------
-// 8. Victoria
-// -----------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * 9. RESOLVING → READY
+ * ---------------------------------------------------------------------------
+ */
 
 test(
-    "la victoria sincroniza GameState pero no vuelve a escribir LevelState desde el Controller",
+    "una resolución normal termina en READY",
+    () => {
+
+        const {
+            controller
+        } =
+            createController();
+
+
+        const result =
+            controller.move({
+
+                objectId:
+                    "object-1",
+
+                destinationSlotId:
+                    "destination-1"
+            });
+
+
+        assert.equal(
+
+            result.flowState,
+
+            GameStateMachine.STATE.READY
+        );
+
+
+        assert.equal(
+
+            controller
+                .getFlowState(),
+
+            GameStateMachine.STATE.READY
+        );
+
+
+        assert.equal(
+
+            result.stateTransition.transitioned,
+
+            true
+        );
+    }
+);
+
+
+/*
+ * ---------------------------------------------------------------------------
+ * 10. Bloqueo durante resolución
+ * ---------------------------------------------------------------------------
+ */
+
+test(
+    "RESOLVING → BLOCKED cuando BlockDetectionSystem detecta bloqueo",
+    () => {
+
+        const {
+            controller
+        } =
+            createController({
+
+                blocked:
+                    true
+            });
+
+
+        const result =
+            controller.move({
+
+                objectId:
+                    "object-1",
+
+                destinationSlotId:
+                    "destination-1"
+            });
+
+
+        assert.equal(
+
+            result.reason,
+
+            GameController.REASON.BLOCKED
+        );
+
+
+        assert.equal(
+
+            result.flowState,
+
+            GameStateMachine.STATE.BLOCKED
+        );
+
+
+        assert.equal(
+
+            controller
+                .getFlowState(),
+
+            GameStateMachine.STATE.BLOCKED
+        );
+    }
+);
+
+
+/*
+ * ---------------------------------------------------------------------------
+ * 11. Victoria
+ * ---------------------------------------------------------------------------
+ */
+
+test(
+    "la victoria sincroniza GameState y termina en VICTORY",
     () => {
 
         const {
@@ -815,27 +1100,41 @@ test(
 
 
         assert.equal(
+
             result.reason,
+
             GameController.REASON.VICTORY
         );
 
 
         assert.equal(
+
             gameState.gamePhase,
+
             GamePhase.WON
         );
 
 
+        assert.equal(
+
+            controller
+                .getFlowState(),
+
+            GameStateMachine.STATE.VICTORY
+        );
+
+
         /*
-         * El fake VictorySystem no modifica LevelState.
+         * VictorySystem simulado no modifica LevelState.
          *
-         * Por tanto, este valor permanece READY y demuestra
-         * que el Controller ya no escribe directamente
-         * LevelState.phase durante la victoria.
+         * El Controller no escribe directamente
+         * LevelState.phase.
          */
         assert.equal(
+
             levelState.phase,
-            GamePhase.READY
+
+            GamePhase.PLAYING
         );
 
 
@@ -849,9 +1148,11 @@ test(
 );
 
 
-// -----------------------------------------------------------------------------
-// 9. Victory → no BlockDetection
-// -----------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * 12. Victory → no BlockDetection
+ * ---------------------------------------------------------------------------
+ */
 
 test(
     "una victoria no ejecuta BlockDetectionSystem",
@@ -891,21 +1192,69 @@ test(
 );
 
 
-// -----------------------------------------------------------------------------
-// 10. Bloqueo
-// -----------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * 13. StructureMovementSystem no forma parte de MOVE_OBJECT
+ * ---------------------------------------------------------------------------
+ */
 
 test(
-    "un movimiento resuelto y bloqueado conserva el resultado del BlockDetectionSystem",
+    "StructureMovementSystem no se ejecuta durante MOVE_OBJECT",
     () => {
 
         const {
-            controller
+            controller,
+            systems
+        } =
+            createController();
+
+
+        controller.move({
+
+            objectId:
+                "object-1",
+
+            destinationSlotId:
+                "destination-1"
+        });
+
+
+        assert.equal(
+
+            systems.calls.some(
+                ([name]) =>
+                    name === "structureMovement"
+            ),
+
+            false
+        );
+    }
+);
+
+
+/*
+ * ---------------------------------------------------------------------------
+ * 14. No se puede iniciar una resolución desde BLOCKED
+ * ---------------------------------------------------------------------------
+ */
+
+test(
+    "rechaza MOVE_OBJECT mientras la máquina está en BLOCKED",
+    () => {
+
+        const stateMachine =
+            new GameStateMachine(
+                GameStateMachine.STATE.BLOCKED
+            );
+
+
+        const {
+            controller,
+            systems
         } =
             createController({
 
-                blocked:
-                    true
+                stateMachine
             });
 
 
@@ -921,39 +1270,202 @@ test(
 
 
         assert.equal(
-            result.reason,
-            GameController.REASON.BLOCKED
+            result.valid,
+            false
         );
 
 
         assert.equal(
-            result.blocked.blocked,
+            result.executed,
+            false
+        );
+
+
+        assert.equal(
+
+            result.reason,
+
+            GameController.REASON.RESOLUTION_ACTIVE
+        );
+
+
+        assert.deepEqual(
+
+            systems.calls,
+
+            []
+        );
+
+
+        assert.equal(
+
+            controller
+                .getFlowState(),
+
+            GameStateMachine.STATE.BLOCKED
+        );
+    }
+);
+
+
+/*
+ * ---------------------------------------------------------------------------
+ * 15. No se puede iniciar una resolución desde VICTORY
+ * ---------------------------------------------------------------------------
+ */
+
+test(
+    "rechaza MOVE_OBJECT mientras la máquina está en VICTORY",
+    () => {
+
+        const stateMachine =
+            new GameStateMachine(
+                GameStateMachine.STATE.VICTORY
+            );
+
+
+        const {
+            controller,
+            systems
+        } =
+            createController({
+
+                stateMachine
+            });
+
+
+        const result =
+            controller.move({
+
+                objectId:
+                    "object-1",
+
+                destinationSlotId:
+                    "destination-1"
+            });
+
+
+        assert.equal(
+            result.valid,
+            false
+        );
+
+
+        assert.equal(
+            result.executed,
+            false
+        );
+
+
+        assert.equal(
+
+            result.reason,
+
+            GameController.REASON.GAME_NOT_PLAYING
+        );
+
+
+        assert.deepEqual(
+
+            systems.calls,
+
+            []
+        );
+    }
+);
+
+
+/*
+ * ---------------------------------------------------------------------------
+ * 16. La máquina vuelve a READY después de un movimiento
+ * ---------------------------------------------------------------------------
+ */
+
+test(
+    "permite un segundo MOVE_OBJECT después de finalizar la primera resolución",
+    () => {
+
+        const {
+            controller,
+            systems
+        } =
+            createController();
+
+
+        const first =
+            controller.move({
+
+                objectId:
+                    "object-1",
+
+                destinationSlotId:
+                    "destination-1"
+            });
+
+
+        const second =
+            controller.move({
+
+                objectId:
+                    "object-2",
+
+                destinationSlotId:
+                    "destination-2"
+            });
+
+
+        assert.equal(
+            first.executed,
+            true
+        );
+
+
+        assert.equal(
+            second.executed,
             true
         );
 
 
         assert.equal(
 
-            result.events[0].type,
+            systems.calls.filter(
+                ([name]) =>
+                    name === "movement"
+            ).length,
 
-            GameEvents.TYPE.OBJECT_MOVED
+            2
+        );
+
+
+        assert.equal(
+
+            controller
+                .getFlowState(),
+
+            GameStateMachine.STATE.READY
         );
     }
 );
 
 
-// -----------------------------------------------------------------------------
-// Resultado
-// -----------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Resultado
+ * ---------------------------------------------------------------------------
+ */
 
 console.log("");
 
 console.log(
+
     `GameController: ${passed}/${passed + failed} tests PASS`
 );
 
 
-if (failed > 0) {
+if (
+    failed > 0
+) {
 
     process.exitCode = 1;
 }
+

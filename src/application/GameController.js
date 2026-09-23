@@ -1,4 +1,6 @@
+javascript
 import GamePhase from "../state/GamePhase.js";
+import GameStateMachine from "./GameStateMachine.js";
 
 import GameCommands from "./commands/GameCommands.js";
 import GameEvents from "./events/GameEvents.js";
@@ -20,25 +22,49 @@ import StructureMovementSystem from "../systems/structure/StructureMovementSyste
  * Responsabilidades:
  *
  * - recibir Commands;
- * - comprobar que la acción puede ejecutarse en la fase actual;
- * - delegar la lógica en los Systems correspondientes;
- * - coordinar la resolución completa de un movimiento;
- * - procesar los resultados de los Systems;
- * - transformar resultados ejecutados en Events;
- * - actualizar GameState cuando corresponda;
- * - coordinar temporizador y final de nivel.
- *
- * IMPORTANTE:
+ * - comprobar que la acción puede ejecutarse;
+ * - coordinar los Systems;
+ * - coordinar la transacción completa de MOVE_OBJECT;
+ * - generar Events a partir de hechos ejecutados;
+ * - sincronizar GameState;
+ * - coordinar el final de la resolución.
  *
  * GameController NO contiene las reglas internas del juego.
  *
- * Las decisiones específicas pertenecen a:
+ * Las reglas pertenecen a:
  *
  *     Rules
  *       ↓
  *     Systems
  *
- * GameController solamente coordina.
+ * GameController únicamente coordina.
+ *
+ *
+ * ESTADO DE APLICACIÓN
+ * --------------------
+ *
+ * GameState.gamePhase continúa representando:
+ *
+ *     READY
+ *     PLAYING
+ *     WON
+ *     LOST
+ *
+ * GameStateMachine representa el flujo operacional:
+ *
+ *     READY
+ *       ↓
+ *   RESOLVING
+ *       ↓
+ *     READY
+ *
+ * o:
+ *
+ *     RESOLVING → BLOCKED
+ *     RESOLVING → VICTORY
+ *
+ * De esta forma no se introduce un estado PLAYING
+ * que no pertenece al modelo de GameStateMachine.
  */
 export default class GameController {
 
@@ -72,141 +98,228 @@ export default class GameController {
             "BLOCKED",
 
         NO_BLOCK:
-            "NO_BLOCK"
+            "NO_BLOCK",
+
+        RESOLUTION_ACTIVE:
+            "RESOLUTION_ACTIVE",
+
+        STATE_TRANSITION_REJECTED:
+            "STATE_TRANSITION_REJECTED"
     });
 
 
     /**
      * @param {Object} params
      * @param {GameState} params.gameState
-     * @param {LevelState} params.levelState
+     * @param {LevelState|null} params.levelState
      * @param {Object} params.systems
-     *
-     * Los Systems se pueden inyectar para facilitar:
-     *
-     * - pruebas;
-     * - simulación;
-     * - sustitución futura;
-     * - integración progresiva.
-     *
-     * Si no se proporcionan, se crean automáticamente.
+     * @param {GameStateMachine|null} params.stateMachine
      */
     constructor({
         gameState,
         levelState,
-        systems = {}
+        systems = {},
+        stateMachine = null
     } = {}) {
 
         if (!gameState) {
+
             throw new Error(
                 "GameController: gameState es obligatorio."
             );
         }
 
-        this.gameState = gameState;
+        this.gameState =
+            gameState;
 
         this.levelState =
             levelState ?? null;
 
 
         /*
-         * Los Systems solamente pueden crearse si existe
-         * un LevelState.
+         * La máquina de estados es una dependencia explícita.
          *
-         * Esto permite crear un GameController antes de
-         * que exista un nivel cargado.
+         * Para compatibilidad con el Controller actual:
+         *
+         *   READY / PLAYING → máquina en READY
+         *   WON            → máquina en VICTORY
+         *   LOST           → máquina en LIFE_LOST
+         *
+         * No se fuerza PLAYING porque GameStateMachine no
+         * contiene ese estado.
+         */
+        this.stateMachine =
+            stateMachine ??
+            this.#createInitialStateMachine();
+
+
+        /*
+         * Los Systems solamente se crean cuando existe
+         * un LevelState.
          */
         if (this.levelState) {
 
-            this.movementSystem =
-                systems.movement ??
-                new MovementSystem(
-                    this.levelState
-                );
-
-            this.trioSystem =
-                systems.trio ??
-                new TrioSystem(
-                    this.levelState
-                );
-
-            this.layerSystem =
-                systems.layer ??
-                new LayerSystem(
-                    this.levelState
-                );
-
-            this.collapseSystem =
-                systems.collapse ??
-                new CollapseSystem(
-                    this.levelState
-                );
-
-            this.victorySystem =
-                systems.victory ??
-                new VictorySystem(
-                    this.levelState
-                );
-
-            this.blockDetectionSystem =
-                systems.blocked ??
-                new BlockDetectionSystem(
-                    this.levelState
-                );
-
-            this.timerSystem =
-                systems.timer ??
-                new TimerSystem(
-                    this.levelState
-                );
-
-            this.structureMovementSystem =
-                systems.structureMovement ??
-                new StructureMovementSystem(
-                    this.levelState
-                );
+            this.#createSystems(
+                systems
+            );
 
         } else {
 
-            this.movementSystem =
-                systems.movement ?? null;
-
-            this.trioSystem =
-                systems.trio ?? null;
-
-            this.layerSystem =
-                systems.layer ?? null;
-
-            this.collapseSystem =
-                systems.collapse ?? null;
-
-            this.victorySystem =
-                systems.victory ?? null;
-
-            this.blockDetectionSystem =
-                systems.blocked ?? null;
-
-            this.timerSystem =
-                systems.timer ?? null;
-
-            this.structureMovementSystem =
-                systems.structureMovement ?? null;
+            this.#clearSystems(
+                systems
+            );
         }
+    }
+
+
+    /**
+     * Crea la máquina inicial a partir del GameState actual.
+     *
+     * GamePhase y GameStateMachine son dos representaciones
+     * diferentes del estado:
+     *
+     * GamePhase:
+     *     estado persistente de partida.
+     *
+     * GameStateMachine:
+     *     estado operacional del flujo.
+     */
+    #createInitialStateMachine() {
+
+        let initialState =
+            GameStateMachine.STATE.READY;
+
+
+        if (
+            this.gameState.gamePhase ===
+            GamePhase.WON
+        ) {
+
+            initialState =
+                GameStateMachine.STATE.VICTORY;
+
+        } else if (
+            this.gameState.gamePhase ===
+            GamePhase.LOST
+        ) {
+
+            initialState =
+                GameStateMachine.STATE.LIFE_LOST;
+        }
+
+
+        return new GameStateMachine(
+            initialState
+        );
+    }
+
+
+    /**
+     * Crea todos los Systems sobre el LevelState actual.
+     */
+    #createSystems(
+        systems = {}
+    ) {
+
+        this.movementSystem =
+            systems.movement ??
+            new MovementSystem(
+                this.levelState
+            );
+
+        this.trioSystem =
+            systems.trio ??
+            new TrioSystem(
+                this.levelState
+            );
+
+        this.layerSystem =
+            systems.layer ??
+            new LayerSystem(
+                this.levelState
+            );
+
+        this.collapseSystem =
+            systems.collapse ??
+            new CollapseSystem(
+                this.levelState
+            );
+
+        this.victorySystem =
+            systems.victory ??
+            new VictorySystem(
+                this.levelState
+            );
+
+        this.blockDetectionSystem =
+            systems.blocked ??
+            new BlockDetectionSystem(
+                this.levelState
+            );
+
+        this.timerSystem =
+            systems.timer ??
+            new TimerSystem(
+                this.levelState
+            );
+
+        this.structureMovementSystem =
+            systems.structureMovement ??
+            new StructureMovementSystem(
+                this.levelState
+            );
+    }
+
+
+    /**
+     * Limpia Systems cuando todavía no existe un LevelState.
+     *
+     * Las dependencias inyectadas se conservan si existen.
+     */
+    #clearSystems(
+        systems = {}
+    ) {
+
+        this.movementSystem =
+            systems.movement ?? null;
+
+        this.trioSystem =
+            systems.trio ?? null;
+
+        this.layerSystem =
+            systems.layer ?? null;
+
+        this.collapseSystem =
+            systems.collapse ?? null;
+
+        this.victorySystem =
+            systems.victory ?? null;
+
+        this.blockDetectionSystem =
+            systems.blocked ?? null;
+
+        this.timerSystem =
+            systems.timer ?? null;
+
+        this.structureMovementSystem =
+            systems.structureMovement ?? null;
     }
 
 
     /**
      * Asocia un LevelState al Controller.
      *
-     * Esta operación se utilizará posteriormente durante
-     * LOADING_LEVEL.
+     * Los Systems se reconstruyen sobre el nuevo LevelState.
      *
-     * Los Systems se reconstruyen para trabajar sobre el
-     * nuevo LevelState.
+     * La máquina de estados vuelve a READY porque el nivel
+     * todavía no está en resolución.
      */
-    setLevelState(levelState) {
+    setLevelState(
+        levelState
+    ) {
 
         if (!levelState) {
+
             throw new Error(
                 "GameController: levelState es obligatorio."
             );
@@ -216,45 +329,33 @@ export default class GameController {
             levelState;
 
 
-        this.movementSystem =
-            new MovementSystem(
-                levelState
-            );
+        this.#createSystems();
 
-        this.trioSystem =
-            new TrioSystem(
-                levelState
-            );
 
-        this.layerSystem =
-            new LayerSystem(
-                levelState
-            );
+        /*
+         * El nivel recién cargado queda preparado para jugar.
+         *
+         * La máquina debe encontrarse en READY.
+         */
+        if (
+            !this.stateMachine.is(
+                GameStateMachine.STATE.READY
+            )
+        ) {
 
-        this.collapseSystem =
-            new CollapseSystem(
-                levelState
-            );
+            const transition =
+                this.#forceState(
+                    GameStateMachine.STATE.READY
+                );
 
-        this.victorySystem =
-            new VictorySystem(
-                levelState
-            );
+            if (!transition.transitioned) {
 
-        this.blockDetectionSystem =
-            new BlockDetectionSystem(
-                levelState
-            );
+                throw new Error(
+                    "GameController: no se pudo preparar la máquina de estados en READY."
+                );
+            }
+        }
 
-        this.timerSystem =
-            new TimerSystem(
-                levelState
-            );
-
-        this.structureMovementSystem =
-            new StructureMovementSystem(
-                levelState
-            );
 
         return this.levelState;
     }
@@ -279,26 +380,86 @@ export default class GameController {
 
 
     /**
+     * Devuelve la máquina de estados.
+     */
+    getStateMachine() {
+
+        return this.stateMachine;
+    }
+
+
+    /**
+     * Devuelve el estado operacional actual.
+     */
+    getFlowState() {
+
+        return this.stateMachine.getState();
+    }
+
+
+    /**
      * Inicia el nivel actualmente cargado.
      *
-     * En esta primera versión:
+     * GameState:
      *
      *     READY → PLAYING
      *
-     * La máquina de estados explícita se incorporará
-     * posteriormente.
+     * GameStateMachine:
+     *
+     *     READY
+     *
+     * El estado READY de la máquina significa que la partida
+     * está preparada para aceptar una interacción.
      */
     start() {
 
         if (!this.levelState) {
 
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
 
                 reason:
                     GameController.REASON.LEVEL_NOT_AVAILABLE
             };
+        }
+
+
+        /*
+         * Si la máquina estaba en un estado terminal,
+         * no forzamos una transición arbitraria.
+         */
+        if (
+            !this.stateMachine.is(
+                GameStateMachine.STATE.READY
+            )
+        ) {
+
+            const transition =
+                this.#forceState(
+                    GameStateMachine.STATE.READY
+                );
+
+            if (!transition.transitioned) {
+
+                return {
+
+                    valid:
+                        false,
+
+                    executed:
+                        false,
+
+                    reason:
+                        GameController.REASON.STATE_TRANSITION_REJECTED,
+
+                    transition
+                };
+            }
         }
 
 
@@ -311,13 +472,13 @@ export default class GameController {
         );
 
 
-        /*
-         * El temporizador se inicia solamente si existe
-         * configuración temporal.
-         */
-        let timerResult = null;
+        let timerResult =
+            null;
 
-        if (this.levelState.timer !== null) {
+
+        if (
+            this.levelState.timer !== null
+        ) {
 
             timerResult =
                 this.timerSystem.start();
@@ -325,14 +486,21 @@ export default class GameController {
 
 
         return {
-            valid: true,
-            executed: true,
+
+            valid:
+                true,
+
+            executed:
+                true,
 
             reason:
                 GameController.REASON.COMMAND_EXECUTED,
 
             phase:
                 GamePhase.PLAYING,
+
+            flowState:
+                this.stateMachine.getState(),
 
             timer:
                 timerResult
@@ -341,22 +509,11 @@ export default class GameController {
 
 
     /**
-     * Punto único de entrada para Commands de aplicación.
-     *
-     * Un Command expresa una intención.
-     *
-     * GameController decide qué flujo de aplicación
-     * corresponde a esa intención.
-     *
-     * IMPORTANTE:
-     *
-     * dispatch() no contiene reglas de juego.
-     * Las reglas siguen perteneciendo a Rules/Systems.
-     *
-     * @param {Object} command
-     * @returns {Object}
+     * Punto único de entrada para Commands.
      */
-    dispatch(command) {
+    dispatch(
+        command
+    ) {
 
         if (
             !command ||
@@ -364,8 +521,12 @@ export default class GameController {
         ) {
 
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
 
                 reason:
                     GameController.REASON.COMMAND_REJECTED
@@ -380,8 +541,12 @@ export default class GameController {
         ) {
 
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
 
                 reason:
                     GameController.REASON.COMMAND_REJECTED,
@@ -391,7 +556,9 @@ export default class GameController {
         }
 
 
-        switch (command.type) {
+        switch (
+            command.type
+        ) {
 
             case GameCommands.TYPE.MOVE_OBJECT:
 
@@ -403,8 +570,12 @@ export default class GameController {
             default:
 
                 return {
-                    valid: false,
-                    executed: false,
+
+                    valid:
+                        false,
+
+                    executed:
+                        false,
 
                     reason:
                         GameController.REASON.COMMAND_REJECTED,
@@ -416,20 +587,17 @@ export default class GameController {
 
 
     /**
-     * Adapta MOVE_OBJECT al flujo transaccional
-     * de movimiento.
-     *
-     * No contiene reglas de juego.
-     *
-     * @param {Object} command
-     * @returns {Object}
+     * Adapta MOVE_OBJECT al flujo transaccional.
      */
-    #executeMoveCommand(command) {
+    #executeMoveCommand(
+        command
+    ) {
 
         const {
             objectId,
             destinationSlotId
-        } = command.payload ?? {};
+        } =
+            command.payload ?? {};
 
 
         return this.#executeMoveTransaction({
@@ -444,14 +612,7 @@ export default class GameController {
 
 
     /**
-     * Fachada de compatibilidad para la API histórica
-     * move().
-     *
-     * La lógica real se ejecuta a través de:
-     *
-     *     Command
-     *       ↓
-     *     dispatch()
+     * Fachada de compatibilidad para move().
      */
     move({
         objectId,
@@ -472,36 +633,37 @@ export default class GameController {
 
 
     /**
-     * Ejecuta la transacción lógica de MOVE_OBJECT.
+     * Ejecuta la transacción completa de MOVE_OBJECT.
      *
-     * Flujo:
+     * Secuencia:
      *
-     *     MovementSystem
-     *          ↓
-     *     TrioSystem
-     *          ↓
-     *     LayerSystem
-     *          ↓
-     *     CollapseSystem
-     *          ↓
-     *     VictorySystem
-     *          ↓
-     *     BlockDetectionSystem
+     *     READY
+     *       ↓
+     *   RESOLVING
+     *       ↓
+     *   MovementSystem
+     *       ↓
+     *   TrioSystem
+     *       ↓
+     *   LayerSystem
+     *       ↓
+     *   CollapseSystem
+     *       ↓
+     *   VictorySystem
+     *       ↓
+     *   BlockDetectionSystem
+     *       ↓
+     *   READY / BLOCKED / VICTORY
      *
-     * Los Systems siguen siendo responsables de sus
-     * propias reglas.
+     * IMPORTANTE:
      *
-     * El Controller solamente:
+     * StructureMovementSystem NO se ejecuta aquí.
      *
-     * - coordina;
-     * - recoge resultados;
-     * - transforma hechos ejecutados en Events;
-     * - sincroniza el GameState global cuando corresponde.
+     * Ese System representa movimiento físico continuo de una
+     * Structure y requiere deltaTime + structureId.
      *
-     * NOTA:
-     *
-     * La atomicidad física/rollback de esta transacción
-     * se incorporará en el siguiente paso de arquitectura.
+     * Su actualización pertenece al ciclo físico correspondiente,
+     * no a la transacción lógica MOVE_OBJECT.
      */
     #executeMoveTransaction({
         objectId,
@@ -515,8 +677,12 @@ export default class GameController {
         ) {
 
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
 
                 reason:
                     GameController.REASON.LEVEL_NOT_AVAILABLE,
@@ -529,8 +695,7 @@ export default class GameController {
 
 
         /*
-         * En esta fase del proyecto solamente permitimos
-         * movimientos durante PLAYING.
+         * MOVE_OBJECT solamente se acepta durante PLAYING.
          */
         if (
             this.gameState.gamePhase !==
@@ -538,8 +703,12 @@ export default class GameController {
         ) {
 
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
 
                 reason:
                     GameController.REASON.GAME_NOT_PLAYING,
@@ -553,6 +722,127 @@ export default class GameController {
             };
         }
 
+
+        /*
+         * La máquina debe estar READY para comenzar
+         * una nueva resolución.
+         *
+         * Esto impide comenzar un nuevo movimiento mientras
+         * la resolución anterior está activa.
+         */
+        if (
+            !this.stateMachine.is(
+                GameStateMachine.STATE.READY
+            )
+        ) {
+
+            return {
+
+                valid:
+                    false,
+
+                executed:
+                    false,
+
+                reason:
+                    GameController.REASON.RESOLUTION_ACTIVE,
+
+                flowState:
+                    this.stateMachine.getState(),
+
+                command,
+
+                events: []
+            };
+        }
+
+
+        /*
+         * ---------------------------------------------------
+         * 0. READY → RESOLVING
+         * ---------------------------------------------------
+         */
+        const resolvingTransition =
+            this.stateMachine.transitionTo(
+                GameStateMachine.STATE.RESOLVING
+            );
+
+
+        if (
+            !resolvingTransition.transitioned
+        ) {
+
+            return {
+
+                valid:
+                    false,
+
+                executed:
+                    false,
+
+                reason:
+                    GameController.REASON.STATE_TRANSITION_REJECTED,
+
+                transition:
+                    resolvingTransition,
+
+                command,
+
+                events: []
+            };
+        }
+
+
+        /*
+         * A partir de aquí estamos dentro de una resolución.
+         *
+         * El estado se libera solamente al finalizar
+         * correctamente la transacción.
+         */
+        try {
+
+            return this.#resolveMove({
+
+                objectId,
+
+                destinationSlotId,
+
+                command
+            });
+
+        } catch (error) {
+
+            /*
+             * ------------------------------------------------
+             * FALLO DURANTE RESOLUCIÓN
+             * ------------------------------------------------
+             *
+             * Todavía no disponemos de snapshots/rollback
+             * del LevelState.
+             *
+             * Por tanto NO fingimos atomicidad física.
+             *
+             * Sí garantizamos, sin embargo, que la máquina
+             * no queda atrapada en RESOLVING.
+             */
+            this.#restoreReadyAfterResolutionError();
+
+            throw error;
+        }
+    }
+
+
+    /**
+     * Ejecuta el cuerpo de la resolución.
+     *
+     * Esta separación permite mantener claramente delimitado
+     * el tramo RESOLVING.
+     */
+    #resolveMove({
+        objectId,
+        destinationSlotId,
+        command
+    }) {
 
         /*
          * ---------------------------------------------------
@@ -569,17 +859,29 @@ export default class GameController {
 
 
         /*
-         * Si el movimiento no se ejecuta:
+         * Si MovementSystem rechaza:
          *
          * - no continúa la transacción;
-         * - no se ejecuta ningún System posterior;
-         * - no se genera ningún Event.
+         * - no se ejecutan Systems posteriores;
+         * - no se generan Events;
+         * - volvemos a READY.
          */
-        if (!movement.executed) {
+        if (
+            !movement.executed
+        ) {
+
+            this.#transitionFromResolving(
+                GameStateMachine.STATE.READY
+            );
+
 
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
 
                 reason:
                     GameController.REASON.MOVEMENT_REJECTED,
@@ -588,17 +890,16 @@ export default class GameController {
 
                 events: [],
 
-                movement
+                movement,
+
+                flowState:
+                    this.stateMachine.getState()
             };
         }
 
 
         /*
-         * A partir de este punto existe un hecho:
-         *
-         *     OBJECT_MOVED
-         *
-         * El Event representa algo que ya ha ocurrido.
+         * OBJECT_MOVED representa un hecho ya ejecutado.
          */
         const events = [
 
@@ -617,11 +918,6 @@ export default class GameController {
          * ---------------------------------------------------
          * 2. TRÍO
          * ---------------------------------------------------
-         *
-         * TrioSystem recibe el Slot destino.
-         *
-         * Si existe y se ejecuta un trío, añadimos
-         * TRIO_COMPLETED.
          */
         const trio =
             this.trioSystem.execute({
@@ -630,7 +926,9 @@ export default class GameController {
             });
 
 
-        if (trio.executed) {
+        if (
+            trio.executed
+        ) {
 
             events.push(
 
@@ -645,13 +943,11 @@ export default class GameController {
 
         /*
          * ---------------------------------------------------
-         * 3. CAPAS
+         * 3. SHELVES AFECTADAS
          * ---------------------------------------------------
          *
-         * Obtenemos las Shelves afectadas por el movimiento.
-         *
-         * Esta función solamente navega por la estructura.
-         * No contiene reglas de juego.
+         * Se obtienen después del movimiento/trío para que
+         * la navegación represente el estado actual.
          */
         const affectedShelfIds =
             this.#getAffectedShelfIds(
@@ -659,7 +955,13 @@ export default class GameController {
             );
 
 
-        const layerResults = [];
+        /*
+         * ---------------------------------------------------
+         * 4. CAPAS
+         * ---------------------------------------------------
+         */
+        const layerResults =
+            [];
 
 
         for (
@@ -678,10 +980,6 @@ export default class GameController {
             );
 
 
-            /*
-             * Solamente un avance realmente ejecutado
-             * produce LAYER_ADVANCED.
-             */
             if (
                 layerResult.executed
             ) {
@@ -695,6 +993,7 @@ export default class GameController {
                         layerResult.advancedLayerIds,
 
                         {
+
                             topLayerId:
                                 layerResult.topLayerId
                         }
@@ -706,13 +1005,11 @@ export default class GameController {
 
         /*
          * ---------------------------------------------------
-         * 4. COLAPSOS
+         * 5. COLAPSOS
          * ---------------------------------------------------
-         *
-         * Un CollapseSystem solamente modifica el estado
-         * cuando CollapseRules determina que corresponde.
          */
-        const collapseResults = [];
+        const collapseResults =
+            [];
 
 
         for (
@@ -731,10 +1028,6 @@ export default class GameController {
             );
 
 
-            /*
-             * Solamente un colapso realmente ejecutado
-             * produce SHELF_COLLAPSED.
-             */
             if (
                 collapseResult.executed
             ) {
@@ -746,6 +1039,7 @@ export default class GameController {
                         collapseResult.shelfId,
 
                         {
+
                             structureId:
                                 collapseResult.structureId,
 
@@ -760,10 +1054,8 @@ export default class GameController {
 
         /*
          * ---------------------------------------------------
-         * 5. VICTORIA
+         * 6. VICTORIA
          * ---------------------------------------------------
-         *
-         * VictorySystem decide si existe victoria.
          */
         const victory =
             this.victorySystem.execute();
@@ -774,15 +1066,9 @@ export default class GameController {
         ) {
 
             /*
-             * VictorySystem ya cambia:
+             * VictorySystem es la autoridad sobre LevelState.
              *
-             *     LevelState.phase → WON
-             *
-             * El Controller NO vuelve a escribir
-             * LevelState.phase.
-             *
-             * Solamente sincroniza el estado global
-             * de la partida.
+             * GameController solamente sincroniza GameState.
              */
             this.gameState.setGamePhase(
                 GamePhase.WON
@@ -796,6 +1082,7 @@ export default class GameController {
                     this.gameState.activeLevel,
 
                     {
+
                         previousPhase:
                             victory.previousPhase,
 
@@ -806,11 +1093,19 @@ export default class GameController {
             );
 
 
+            const transition =
+                this.#transitionFromResolving(
+                    GameStateMachine.STATE.VICTORY
+                );
+
+
             return {
 
-                valid: true,
+                valid:
+                    true,
 
-                executed: true,
+                executed:
+                    true,
 
                 reason:
                     GameController.REASON.VICTORY,
@@ -829,37 +1124,97 @@ export default class GameController {
 
                 victory,
 
-                blocked: null
+                blocked:
+                    null,
+
+                flowState:
+                    transition.state,
+
+                stateTransition:
+                    transition
             };
         }
 
 
         /*
          * ---------------------------------------------------
-         * 6. BLOQUEO
+         * 7. BLOQUEO
          * ---------------------------------------------------
-         *
-         * BlockDetectionSystem NO pierde automáticamente
-         * una vida.
-         *
-         * El resultado solamente informa de la situación.
          */
         const blocked =
             this.blockDetectionSystem.execute();
 
 
+        if (
+            blocked.blocked === true
+        ) {
+
+            const transition =
+                this.#transitionFromResolving(
+                    GameStateMachine.STATE.BLOCKED
+                );
+
+
+            return {
+
+                valid:
+                    true,
+
+                executed:
+                    true,
+
+                reason:
+                    GameController.REASON.BLOCKED,
+
+                command,
+
+                events,
+
+                movement,
+
+                trio,
+
+                layerResults,
+
+                collapseResults,
+
+                victory,
+
+                blocked,
+
+                flowState:
+                    transition.state,
+
+                stateTransition:
+                    transition
+            };
+        }
+
+
+        /*
+         * ---------------------------------------------------
+         * 8. FIN DE RESOLUCIÓN
+         * ---------------------------------------------------
+         *
+         * La partida continúa en PLAYING y la máquina vuelve
+         * a READY para permitir el siguiente MOVE_OBJECT.
+         */
+        const transition =
+            this.#transitionFromResolving(
+                GameStateMachine.STATE.READY
+            );
+
+
         return {
 
-            valid: true,
+            valid:
+                true,
 
-            executed: true,
+            executed:
+                true,
 
             reason:
-                blocked.blocked === true
-
-                    ? GameController.REASON.BLOCKED
-
-                    : GameController.REASON.MOVEMENT_RESOLVED,
+                GameController.REASON.MOVEMENT_RESOLVED,
 
             command,
 
@@ -875,19 +1230,242 @@ export default class GameController {
 
             victory,
 
-            blocked
+            blocked,
+
+            flowState:
+                transition.state,
+
+            stateTransition:
+                transition
         };
+    }
+
+
+    /**
+     * Transición de salida desde RESOLVING.
+     */
+    #transitionFromResolving(
+        nextState
+    ) {
+
+        const transition =
+            this.stateMachine.transitionTo(
+                nextState
+            );
+
+
+        if (
+            !transition.transitioned
+        ) {
+
+            throw new Error(
+                `GameController: transición inválida RESOLVING → ${nextState}.`
+            );
+        }
+
+
+        return transition;
+    }
+
+
+    /**
+     * Recuperación del estado operacional después de
+     * una excepción durante la resolución.
+     *
+     * No realiza rollback físico del LevelState.
+     *
+     * Solamente evita dejar la máquina permanentemente
+     * bloqueada en RESOLVING.
+     */
+    #restoreReadyAfterResolutionError() {
+
+        if (
+            this.stateMachine.is(
+                GameStateMachine.STATE.RESOLVING
+            )
+        ) {
+
+            const transition =
+                this.stateMachine.transitionTo(
+                    GameStateMachine.STATE.READY
+                );
+
+
+            if (
+                !transition.transitioned
+            ) {
+
+                throw new Error(
+                    "GameController: no se pudo recuperar READY tras un error de resolución."
+                );
+            }
+        }
+    }
+
+
+    /**
+     * Cambia directamente a un estado de preparación
+     * solamente durante la configuración del Controller.
+     *
+     * No se utiliza durante una resolución.
+     */
+    #forceState(
+        targetState
+    ) {
+
+        const currentState =
+            this.stateMachine.getState();
+
+
+        if (
+            currentState ===
+            targetState
+        ) {
+
+            return {
+
+                transitioned:
+                    true,
+
+                previousState:
+                    currentState,
+
+                state:
+                    targetState,
+
+                reason:
+                    GameStateMachine.REASON.SAME_STATE
+            };
+        }
+
+
+        /*
+         * Intentamos primero una transición normal.
+         */
+        const transition =
+            this.stateMachine.transitionTo(
+                targetState
+            );
+
+
+        if (
+            transition.transitioned
+        ) {
+
+            return transition;
+        }
+
+
+        /*
+         * La máquina no ofrece una transición administrativa
+         * directa desde todos los estados.
+         *
+         * En esta fase solamente permitimos reiniciar cuando
+         * estamos configurando un nuevo nivel.
+         */
+        const reset =
+            this.stateMachine.reset();
+
+
+        if (
+            !reset ||
+            this.stateMachine.getState() !==
+            GameStateMachine.STATE.BOOT
+        ) {
+
+            return {
+
+                transitioned:
+                    false,
+
+                previousState:
+                    currentState,
+
+                state:
+                    this.stateMachine.getState(),
+
+                reason:
+                    GameStateMachine.REASON.INVALID_TRANSITION
+            };
+        }
+
+
+        /*
+         * BOOT → MENU → LOADING_LEVEL → READY
+         *
+         * Se utilizan exclusivamente para preparar el nuevo
+         * nivel. No representan un flujo de juego iniciado
+         * por el usuario en este punto.
+         */
+        const menu =
+            this.stateMachine.transitionTo(
+                GameStateMachine.STATE.MENU
+            );
+
+
+        if (
+            !menu.transitioned
+        ) {
+
+            return {
+
+                transitioned:
+                    false,
+
+                previousState:
+                    currentState,
+
+                state:
+                    this.stateMachine.getState(),
+
+                reason:
+                    menu.reason
+            };
+        }
+
+
+        const loading =
+            this.stateMachine.transitionTo(
+                GameStateMachine.STATE.LOADING_LEVEL
+            );
+
+
+        if (
+            !loading.transitioned
+        ) {
+
+            return {
+
+                transitioned:
+                    false,
+
+                previousState:
+                    currentState,
+
+                state:
+                    this.stateMachine.getState(),
+
+                reason:
+                    loading.reason
+            };
+        }
+
+
+        return this.stateMachine.transitionTo(
+            targetState
+        );
     }
 
 
     /**
      * Actualiza el temporizador.
      *
-     * TimerSystem solamente gestiona el tiempo.
-     *
+     * TimerSystem gestiona el tiempo.
      * GameController interpreta TIME_EXPIRED.
      */
-    update(deltaTime) {
+    update(
+        deltaTime
+    ) {
 
         if (
             !this.levelState ||
@@ -895,8 +1473,12 @@ export default class GameController {
         ) {
 
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
 
                 reason:
                     GameController.REASON.LEVEL_NOT_AVAILABLE
@@ -915,7 +1497,15 @@ export default class GameController {
             TimerSystem.REASON.TIME_EXPIRED
         ) {
 
+            /*
+             * El temporizador es un flujo independiente
+             * de MOVE_OBJECT.
+             *
+             * La sincronización completa TIME_OUT/LIFE_LOST
+             * se desarrollará en la fase correspondiente.
+             */
             return {
+
                 ...result,
 
                 controllerReason:
@@ -936,8 +1526,12 @@ export default class GameController {
         if (!this.timerSystem) {
 
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
 
                 reason:
                     GameController.REASON.LEVEL_NOT_AVAILABLE
@@ -957,8 +1551,12 @@ export default class GameController {
         if (!this.timerSystem) {
 
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
 
                 reason:
                     GameController.REASON.LEVEL_NOT_AVAILABLE
@@ -971,25 +1569,21 @@ export default class GameController {
 
 
     /**
-     * Devuelve las Shelves afectadas por el movimiento.
+     * Devuelve las Shelves afectadas por un movimiento.
      *
-     * IMPORTANTE:
-     *
-     * Esta función NO contiene reglas de juego.
-     *
-     * Únicamente obtiene información estructural.
-     *
-     * La resolución de dependencias entre Shelves
-     * pertenece a los Systems/Rules correspondientes.
+     * Solamente realiza navegación estructural.
      */
-    #getAffectedShelfIds(movement) {
+    #getAffectedShelfIds(
+        movement
+    ) {
 
         if (!movement) {
             return [];
         }
 
 
-        const shelfIds = [];
+        const shelfIds =
+            [];
 
 
         const addShelfForSlot =
@@ -1049,9 +1643,14 @@ export default class GameController {
      *
      * Solamente realiza navegación estructural.
      */
-    #getSlotLocation(slotId) {
+    #getSlotLocation(
+        slotId
+    ) {
 
-        if (!this.levelState?.board) {
+        if (
+            !this.levelState?.board
+        ) {
+
             return null;
         }
 
@@ -1121,7 +1720,8 @@ export default class GameController {
                     ) {
 
                         if (
-                            slot.id === slotId
+                            slot.id ===
+                            slotId
                         ) {
 
                             return {
@@ -1148,3 +1748,4 @@ export default class GameController {
         return null;
     }
 }
+

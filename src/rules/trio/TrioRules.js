@@ -11,6 +11,22 @@
  *   - permitir Objects bloqueados;
  *   - excluir Objects especiales REWARD.
  *
+ * Condiciones consolidadas:
+ *
+ *   3 Objects
+ *   +
+ *   mismo type
+ *   +
+ *   mismo color
+ *   +
+ *   mismo Shelf
+ *   +
+ *   misma Layer
+ *   +
+ *   Layer = TOP
+ *
+ * Una acción del jugador puede producir como máximo un trío.
+ *
  * Esta regla NO:
  *   - mueve Objects;
  *   - elimina Objects;
@@ -21,30 +37,47 @@
  *   - realiza colapsos;
  *   - comprueba victoria.
  *
- * El movimiento debe haber sido ejecutado previamente por MovementSystem
- * cuando TrioRules sea utilizada dentro del flujo normal del juego.
+ * El movimiento debe haber sido ejecutado previamente por
+ * MovementSystem cuando TrioRules sea utilizada dentro del
+ * flujo normal del juego.
  */
 
 import StateQueries from "../../state/StateQueries.js";
 
 export default class TrioRules {
+
     static REASON = Object.freeze({
-        VALID: "VALID",
-        DESTINATION_NOT_FOUND: "DESTINATION_NOT_FOUND",
-        DESTINATION_NOT_TOP: "DESTINATION_NOT_TOP",
-        NO_TRIO: "NO_TRIO",
-        SPECIAL_OBJECT: "SPECIAL_OBJECT"
+
+        VALID:
+            "VALID",
+
+        DESTINATION_NOT_FOUND:
+            "DESTINATION_NOT_FOUND",
+
+        DESTINATION_NOT_TOP:
+            "DESTINATION_NOT_TOP",
+
+        NO_TRIO:
+            "NO_TRIO",
+
+        SPECIAL_OBJECT:
+            "SPECIAL_OBJECT"
     });
 
     constructor(levelState) {
+
         if (!levelState) {
+
             throw new Error(
                 "TrioRules: LevelState es obligatorio."
             );
         }
 
-        this.levelState = levelState;
-        this.queries = new StateQueries(levelState);
+        this.levelState =
+            levelState;
+
+        this.queries =
+            new StateQueries(levelState);
     }
 
     /**
@@ -68,27 +101,51 @@ export default class TrioRules {
      *   objectIds: Array
      * }}
      */
-    validate({ destinationSlotId } = {}) {
+    validate({
+        destinationSlotId
+    } = {}) {
+
         const result = {
-            valid: false,
-            reason: null,
+
+            valid:
+                false,
+
+            reason:
+                null,
+
             destinationSlotId:
                 destinationSlotId ?? null,
-            objectId: null,
-            shelfId: null,
-            layerId: null,
-            structureId: null,
-            matchKey: null,
-            objectIds: []
+
+            objectId:
+                null,
+
+            shelfId:
+                null,
+
+            layerId:
+                null,
+
+            structureId:
+                null,
+
+            matchKey:
+                null,
+
+            objectIds:
+                []
         };
 
         /*
-         * 1. Debemos tener un destino.
+         * ========================================================
+         * 1. DESTINO
+         * ========================================================
          */
+
         if (
             destinationSlotId === undefined ||
             destinationSlotId === null
         ) {
+
             return this.#invalid(
                 result,
                 TrioRules.REASON.DESTINATION_NOT_FOUND
@@ -96,12 +153,18 @@ export default class TrioRules {
         }
 
         /*
-         * 2. Localizamos el Slot destino.
+         * ========================================================
+         * 2. LOCALIZACIÓN DEL DESTINO
+         * ========================================================
          */
+
         const destinationLocation =
-            this.#getSlotLocation(destinationSlotId);
+            this.#getSlotLocation(
+                destinationSlotId
+            );
 
         if (!destinationLocation) {
+
             return this.#invalid(
                 result,
                 TrioRules.REASON.DESTINATION_NOT_FOUND
@@ -115,14 +178,30 @@ export default class TrioRules {
             slot
         } = destinationLocation;
 
-        result.structureId = structure?.id ?? null;
-        result.shelfId = shelf?.id ?? null;
-        result.layerId = layer?.id ?? null;
+        result.structureId =
+            structure.id;
+
+        result.shelfId =
+            shelf.id;
+
+        result.layerId =
+            layer.id;
 
         /*
-         * 3. El trío solo puede existir en TOP.
+         * ========================================================
+         * 3. DESTINO TOP
+         * ========================================================
+         *
+         * Solo TOP es interactiva y solo TOP puede producir
+         * un trío.
          */
-        if (!this.queries.isTopLayer(layer.id)) {
+
+        if (
+            !this.queries.isTopLayer(
+                layer.id
+            )
+        ) {
+
             return this.#invalid(
                 result,
                 TrioRules.REASON.DESTINATION_NOT_TOP
@@ -130,11 +209,16 @@ export default class TrioRules {
         }
 
         /*
-         * 4. El Slot destino debe contener un Object.
+         * ========================================================
+         * 4. DESTINO OCUPADO
+         * ========================================================
          *
-         * Si está vacío no existe trío producido por ese destino.
+         * El trío solamente puede comprobarse a partir del
+         * Object que ocupa el Slot destino.
          */
+
         if (slot.isEmpty()) {
+
             return this.#invalid(
                 result,
                 TrioRules.REASON.NO_TRIO
@@ -142,21 +226,33 @@ export default class TrioRules {
         }
 
         const destinationObject =
-            this.queries.getObject(slot.objectId);
+            this.queries.getObject(
+                slot.objectId
+            );
 
         if (!destinationObject) {
+
             return this.#invalid(
                 result,
                 TrioRules.REASON.NO_TRIO
             );
         }
 
-        result.objectId = destinationObject.id;
+        result.objectId =
+            destinationObject.id;
 
         /*
-         * 5. Los Objects REWARD no participan en tríos.
+         * ========================================================
+         * 5. OBJETOS ESPECIALES REWARD
+         * ========================================================
+         *
+         * Los REWARD no forman tríos.
          */
-        if (destinationObject.isReward()) {
+
+        if (
+            destinationObject.isReward()
+        ) {
+
             return this.#invalid(
                 result,
                 TrioRules.REASON.SPECIAL_OBJECT
@@ -164,36 +260,58 @@ export default class TrioRules {
         }
 
         /*
-         * 6. La identidad de un Object para tríos es:
+         * ========================================================
+         * 6. IDENTIDAD DEL TRÍO
+         * ========================================================
          *
-         *      type + color
+         * La identidad lógica es:
+         *
+         *     type + color
          */
+
         const matchKey =
             destinationObject.getMatchKey();
 
-        result.matchKey = matchKey;
+        result.matchKey =
+            matchKey;
 
         /*
-         * 7. Buscamos los Objects de la misma identidad
-         *    dentro de ESTA MISMA Layer.
+         * ========================================================
+         * 7. BUSCAR CANDIDATOS
+         * ========================================================
          *
-         * No buscamos en:
-         *   - otras Layers;
-         *   - otras Shelves;
-         *   - otras Structures.
+         * IMPORTANTÍSIMO:
          *
-         * Eso garantiza:
+         * Se recorre solamente:
          *
-         *   mismo Shelf
-         *   +
-         *   misma Layer
-         *   +
-         *   TOP
+         *     esta Layer
+         *
+         * que ya sabemos que pertenece a:
+         *
+         *     este Shelf
+         *
+         * y además es:
+         *
+         *     TOP
+         *
+         * Por tanto no se mezclan:
+         *
+         *   - Shelves diferentes;
+         *   - Layers diferentes;
+         *   - Structures diferentes.
          */
-        const matchingObjectIds = [];
 
-        for (const candidateSlot of layer.slots) {
-            if (candidateSlot.isEmpty()) {
+        const matchingObjectIds =
+            [];
+
+        for (
+            const candidateSlot
+            of layer.slots
+        ) {
+
+            if (
+                candidateSlot.isEmpty()
+            ) {
                 continue;
             }
 
@@ -209,7 +327,9 @@ export default class TrioRules {
             /*
              * Los REWARD quedan fuera de la lógica de tríos.
              */
-            if (candidateObject.isReward()) {
+            if (
+                candidateObject.isReward()
+            ) {
                 continue;
             }
 
@@ -217,6 +337,7 @@ export default class TrioRules {
                 candidateObject.getMatchKey() ===
                 matchKey
             ) {
+
                 matchingObjectIds.push(
                     candidateObject.id
                 );
@@ -224,14 +345,23 @@ export default class TrioRules {
         }
 
         /*
-         * 8. Deben existir exactamente tres Objects
-         *    con la misma identidad.
+         * ========================================================
+         * 8. EXACTAMENTE TRES
+         * ========================================================
          *
-         * Una Shelf NORMAL tiene 3 Slots por Layer,
-         * por lo que una capa no puede producir más de
-         * un trío simultáneamente.
+         * Una Layer NORMAL tiene tres Slots, por lo que
+         * como máximo puede existir un trío.
+         *
+         * Un SPECIAL tiene un único Slot y no puede formar
+         * un trío.
+         *
+         * Por ello exigimos exactamente tres coincidencias.
          */
-        if (matchingObjectIds.length !== 3) {
+
+        if (
+            matchingObjectIds.length !== 3
+        ) {
+
             return this.#invalid(
                 result,
                 TrioRules.REASON.NO_TRIO
@@ -239,23 +369,35 @@ export default class TrioRules {
         }
 
         /*
-         * 9. Trío detectado.
+         * ========================================================
+         * 9. TRÍO VÁLIDO
+         * ========================================================
          *
-         * IMPORTANTE:
-         * aquí no se modifica el estado.
+         * No se modifica el estado.
          */
+
         return {
+
             ...result,
-            valid: true,
-            reason: TrioRules.REASON.VALID,
-            objectIds: matchingObjectIds
+
+            valid:
+                true,
+
+            reason:
+                TrioRules.REASON.VALID,
+
+            objectIds:
+                matchingObjectIds
         };
     }
 
     /**
      * Atajo booleano.
      */
-    hasTrio({ destinationSlotId } = {}) {
+    hasTrio({
+        destinationSlotId
+    } = {}) {
+
         return this.validate({
             destinationSlotId
         }).valid;
@@ -265,7 +407,10 @@ export default class TrioRules {
      * Devuelve los IDs de los tres Objects que forman
      * el trío, o [] si no existe.
      */
-    getTrioObjectIds({ destinationSlotId } = {}) {
+    getTrioObjectIds({
+        destinationSlotId
+    } = {}) {
+
         return this.validate({
             destinationSlotId
         }).objectIds;
@@ -284,15 +429,20 @@ export default class TrioRules {
      * }
      */
     #getSlotLocation(slotId) {
+
         const layer =
-            this.queries.getLayerForSlot(slotId);
+            this.queries.getLayerForSlot(
+                slotId
+            );
 
         if (!layer) {
             return null;
         }
 
         const shelf =
-            this.queries.getShelfForLayer(layer.id);
+            this.queries.getShelfForLayer(
+                layer.id
+            );
 
         if (!shelf) {
             return null;
@@ -308,7 +458,9 @@ export default class TrioRules {
         }
 
         const slot =
-            layer.getSlotById(slotId);
+            layer.getSlotById(
+                slotId
+            );
 
         if (!slot) {
             return null;
@@ -322,12 +474,22 @@ export default class TrioRules {
         };
     }
 
-    #invalid(result, reason) {
+    #invalid(
+        result,
+        reason
+    ) {
+
         return {
+
             ...result,
-            valid: false,
+
+            valid:
+                false,
+
             reason,
-            objectIds: []
+
+            objectIds:
+                []
         };
     }
 }

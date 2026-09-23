@@ -1,3 +1,4 @@
+javascript
 /**
  * TrioSystem
  *
@@ -41,20 +42,30 @@
 import TrioRules from "../../rules/trio/TrioRules.js";
 
 export default class TrioSystem {
+
     static REASON = Object.freeze({
-        TRIO_EXECUTED: "TRIO_EXECUTED",
-        TRIO_REJECTED: "TRIO_REJECTED"
+
+        TRIO_EXECUTED:
+            "TRIO_EXECUTED",
+
+        TRIO_REJECTED:
+            "TRIO_REJECTED"
     });
 
     constructor(levelState) {
+
         if (!levelState) {
+
             throw new Error(
                 "TrioSystem: levelState es obligatorio."
             );
         }
 
-        this.levelState = levelState;
-        this.rules = new TrioRules(levelState);
+        this.levelState =
+            levelState;
+
+        this.rules =
+            new TrioRules(levelState);
     }
 
     /**
@@ -67,56 +78,104 @@ export default class TrioSystem {
      *
      * @returns {Object}
      */
-    execute({ destinationSlotId } = {}) {
+    execute({
+        destinationSlotId
+    } = {}) {
+
+        /*
+         * ========================================================
+         * 1. VALIDACIÓN
+         * ========================================================
+         *
+         * TrioRules es la autoridad para determinar si existe
+         * un trío válido.
+         */
         const validation =
             this.rules.validate({
                 destinationSlotId
             });
 
         /*
-         * Si TrioRules determina que no existe un trío,
-         * no modificamos absolutamente nada.
+         * Si no existe un trío válido, no modificamos
+         * absolutamente nada.
          */
         if (!validation.valid) {
+
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
+
                 reason:
                     TrioSystem.REASON.TRIO_REJECTED,
+
                 validation
             };
         }
 
         /*
-         * Un resultado válido debe contener exactamente
-         * los tres Objects que forman el trío.
+         * ========================================================
+         * 2. VALIDAR RESULTADO DE LA REGLA
+         * ========================================================
+         *
+         * La regla debe devolver exactamente tres Objects.
+         *
+         * Si no ocurre, abortamos antes de modificar el estado.
          */
         if (
-            !Array.isArray(validation.objectIds) ||
+            !Array.isArray(
+                validation.objectIds
+            ) ||
             validation.objectIds.length !== 3
         ) {
+
             return {
-                valid: false,
-                executed: false,
+
+                valid:
+                    false,
+
+                executed:
+                    false,
+
                 reason:
                     TrioSystem.REASON.TRIO_REJECTED,
+
                 validation: {
-                    valid: false,
-                    reason: "INVALID_TRIO_RESULT"
+
+                    valid:
+                        false,
+
+                    reason:
+                        "INVALID_TRIO_RESULT"
                 }
             };
         }
 
         /*
-         * Antes de modificar el estado verificamos que
-         * todos los Objects existen y que cada uno está
-         * realmente ubicado en un Slot.
+         * ========================================================
+         * 3. COMPROBACIÓN TRANSACCIONAL
+         * ========================================================
          *
-         * Esto evita realizar una resolución parcial.
+         * Antes de limpiar ningún Slot comprobamos que:
+         *
+         *   - los tres Objects existen;
+         *   - cada Object está realmente colocado en un Slot.
+         *
+         * De esta manera nunca podemos realizar una resolución
+         * parcial.
          */
-        const objects = [];
 
-        for (const objectId of validation.objectIds) {
+        const objects =
+            [];
+
+        for (
+            const objectId
+            of validation.objectIds
+        ) {
+
             const object =
                 this.levelState.getObjectById(
                     objectId
@@ -127,14 +186,27 @@ export default class TrioSystem {
                     objectId
                 );
 
-            if (!object || !slot) {
+            if (
+                !object ||
+                !slot
+            ) {
+
                 return {
-                    valid: false,
-                    executed: false,
+
+                    valid:
+                        false,
+
+                    executed:
+                        false,
+
                     reason:
                         TrioSystem.REASON.TRIO_REJECTED,
+
                     validation: {
-                        valid: false,
+
+                        valid:
+                            false,
+
                         reason:
                             "INVALID_TRIO_STATE"
                     }
@@ -142,40 +214,71 @@ export default class TrioSystem {
             }
 
             objects.push({
+
                 object,
+
                 slot
             });
         }
 
         /*
-         * 1. Liberamos los Slots.
+         * ========================================================
+         * 4. LIBERAR LOS SLOTS
+         * ========================================================
          *
-         * Los Slots NO se eliminan.
-         * Mantienen su identidad y su posición dentro
-         * de la Layer.
+         * Los Slots permanecen en la Layer.
+         *
+         * Solamente desaparece su referencia al Object.
          */
-        for (const { slot } of objects) {
+        for (
+            const {
+                slot
+            }
+            of objects
+        ) {
+
             slot.clear();
         }
 
         /*
-         * 2. Eliminamos los Objects del registro de LevelState.
+         * ========================================================
+         * 5. ELIMINAR OBJECTS
+         * ========================================================
          *
-         * La identidad de los Objects deja de formar parte
-         * del estado activo del nivel.
+         * Los tres Objects dejan de formar parte del estado
+         * activo del nivel.
          */
-        for (const { object } of objects) {
+        for (
+            const {
+                object
+            }
+            of objects
+        ) {
+
             this.levelState.removeObject(
                 object.id
             );
         }
 
+        /*
+         * ========================================================
+         * 6. RESULTADO
+         * ========================================================
+         */
+
         return {
-            valid: true,
-            executed: true,
+
+            valid:
+                true,
+
+            executed:
+                true,
+
             reason:
                 TrioSystem.REASON.TRIO_EXECUTED,
+
             destinationSlotId,
+
             objectIds: [
                 ...validation.objectIds
             ]
@@ -183,26 +286,29 @@ export default class TrioSystem {
     }
 
     /**
-     * Alias semántico para execute().
-     *
-     * @param {Object} params
-     * @param {string|number} params.destinationSlotId
+     * Alias semántico de execute().
      */
-    resolve({ destinationSlotId } = {}) {
+    resolve({
+        destinationSlotId
+    } = {}) {
+
         return this.execute({
             destinationSlotId
         });
     }
 
     /**
-     * Alias semántico para execute().
+     * Alias semántico de execute().
      *
-     * @param {Object} params
-     * @param {string|number} params.destinationSlotId
+     * Se mantiene por compatibilidad con el API actual.
      */
-    advance({ destinationSlotId } = {}) {
+    advance({
+        destinationSlotId
+    } = {}) {
+
         return this.execute({
             destinationSlotId
         });
     }
 }
+

@@ -10,41 +10,93 @@
  *   - no ejecutar el movimiento;
  *   - no resolver tríos, capas, colapsos, victoria ni bloqueos de partida.
  *
- * Separación importante:
- *   La detección física/visual de qué Slot está bajo el puntero y la
- *   comprobación de proximidad/"imán" pertenecen a la capa de interacción.
- *   Esta regla recibe el destinationSlotId que esa capa haya resuelto.
+ * Reglas consolidadas:
+ *
+ *   - El Object debe existir.
+ *   - El Object debe tener una ubicación lógica válida.
+ *   - El Object debe estar en una Layer TOP.
+ *   - Un Object bloqueado no puede moverse.
+ *   - El destino debe existir.
+ *   - El destino debe pertenecer a una jerarquía válida:
+ *       Structure -> Shelf -> Layer -> Slot
+ *   - El destino debe estar en una Layer TOP.
+ *   - El destino debe estar vacío.
+ *   - El destino no puede ser el mismo Slot de origen.
+ *
+ * Los destinos físicos, la detección de proximidad, el "imán" y las
+ * coordenadas de estructuras móviles pertenecen a la capa de interacción.
+ *
+ * Esta regla trabaja exclusivamente con identidad lógica:
+ *
+ *   objectId
+ *   destinationSlotId
+ *
+ * No utiliza coordenadas de pantalla.
  */
 
 import StateQueries from "../../state/StateQueries.js";
 
 export default class MovementRules {
+
     static REASON = Object.freeze({
-        VALID: "VALID",
-        OBJECT_NOT_FOUND: "OBJECT_NOT_FOUND",
-        OBJECT_LOCATION_NOT_FOUND: "OBJECT_LOCATION_NOT_FOUND",
-        SOURCE_NOT_TOP: "SOURCE_NOT_TOP",
-        OBJECT_BLOCKED: "OBJECT_BLOCKED",
-        DESTINATION_NOT_FOUND: "DESTINATION_NOT_FOUND",
-        DESTINATION_NOT_TOP: "DESTINATION_NOT_TOP",
-        DESTINATION_OCCUPIED: "DESTINATION_OCCUPIED",
-        DESTINATION_SHELF_INVALID: "DESTINATION_SHELF_INVALID",
-        DESTINATION_LAYER_INVALID: "DESTINATION_LAYER_INVALID",
-        DESTINATION_STRUCTURE_INVALID: "DESTINATION_STRUCTURE_INVALID",
-        SAME_SLOT: "SAME_SLOT"
+        VALID:
+            "VALID",
+
+        OBJECT_NOT_FOUND:
+            "OBJECT_NOT_FOUND",
+
+        OBJECT_LOCATION_NOT_FOUND:
+            "OBJECT_LOCATION_NOT_FOUND",
+
+        SOURCE_NOT_TOP:
+            "SOURCE_NOT_TOP",
+
+        OBJECT_BLOCKED:
+            "OBJECT_BLOCKED",
+
+        DESTINATION_NOT_FOUND:
+            "DESTINATION_NOT_FOUND",
+
+        DESTINATION_NOT_TOP:
+            "DESTINATION_NOT_TOP",
+
+        DESTINATION_OCCUPIED:
+            "DESTINATION_OCCUPIED",
+
+        DESTINATION_SHELF_INVALID:
+            "DESTINATION_SHELF_INVALID",
+
+        DESTINATION_LAYER_INVALID:
+            "DESTINATION_LAYER_INVALID",
+
+        DESTINATION_STRUCTURE_INVALID:
+            "DESTINATION_STRUCTURE_INVALID",
+
+        SAME_SLOT:
+            "SAME_SLOT"
     });
 
     constructor(levelState) {
+
         if (!levelState) {
-            throw new Error("MovementRules: LevelState es obligatorio.");
+            throw new Error(
+                "MovementRules: LevelState es obligatorio."
+            );
         }
 
-        this.levelState = levelState;
-        this.queries = new StateQueries(levelState);
+        this.levelState =
+            levelState;
+
+        this.queries =
+            new StateQueries(levelState);
     }
 
     /**
      * Comprueba si el movimiento lógico es válido.
+     *
+     * IMPORTANTE:
+     *
+     * Esta función NO ejecuta el movimiento.
      *
      * @param {Object} input
      * @param {string|number} input.objectId
@@ -64,34 +116,69 @@ export default class MovementRules {
      *   destinationStructureId: string|number|null
      * }}
      */
-    validate({ objectId, destinationSlotId } = {}) {
+    validate({
+        objectId,
+        destinationSlotId
+    } = {}) {
+
         const baseResult = {
-            valid: false,
-            reason: null,
-            objectId: objectId ?? null,
-            sourceSlotId: null,
-            destinationSlotId: destinationSlotId ?? null,
-            sourceLayerId: null,
-            destinationLayerId: null,
-            sourceShelfId: null,
-            destinationShelfId: null,
-            sourceStructureId: null,
-            destinationStructureId: null
+
+            valid:
+                false,
+
+            reason:
+                null,
+
+            objectId:
+                objectId ?? null,
+
+            sourceSlotId:
+                null,
+
+            destinationSlotId:
+                destinationSlotId ?? null,
+
+            sourceLayerId:
+                null,
+
+            destinationLayerId:
+                null,
+
+            sourceShelfId:
+                null,
+
+            destinationShelfId:
+                null,
+
+            sourceStructureId:
+                null,
+
+            destinationStructureId:
+                null
         };
 
         /*
-         * 1. El Object debe existir en LevelState.
+         * ========================================================
+         * 1. OBJECT
+         * ========================================================
          */
-        if (objectId === undefined || objectId === null) {
+
+        if (
+            objectId === undefined ||
+            objectId === null
+        ) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.OBJECT_NOT_FOUND
             );
         }
 
-        const object = this.queries.getObject(objectId);
+        const object =
+            this.queries.getObject(objectId);
 
         if (!object) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.OBJECT_NOT_FOUND
@@ -99,27 +186,50 @@ export default class MovementRules {
         }
 
         /*
-         * 2. El Object debe encontrarse realmente en un Slot
-         *    dentro de la jerarquía lógica del Board.
+         * ========================================================
+         * 2. UBICACIÓN LÓGICA DEL OBJECT
+         * ========================================================
          */
-        const sourceLocation = this.queries.getObjectLocation(objectId);
+
+        const sourceLocation =
+            this.queries.getObjectLocation(
+                objectId
+            );
 
         if (!sourceLocation) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.OBJECT_LOCATION_NOT_FOUND
             );
         }
 
-        baseResult.sourceSlotId = sourceLocation.slot.id;
-        baseResult.sourceLayerId = sourceLocation.layer.id;
-        baseResult.sourceShelfId = sourceLocation.shelf.id;
-        baseResult.sourceStructureId = sourceLocation.structure.id;
+        baseResult.sourceSlotId =
+            sourceLocation.slot.id;
+
+        baseResult.sourceLayerId =
+            sourceLocation.layer.id;
+
+        baseResult.sourceShelfId =
+            sourceLocation.shelf.id;
+
+        baseResult.sourceStructureId =
+            sourceLocation.structure.id;
 
         /*
-         * 3. Solo puede moverse un Object situado en una capa TOP.
+         * ========================================================
+         * 3. ORIGEN TOP
+         * ========================================================
+         *
+         * Solamente TOP es interactiva.
          */
-        if (!this.queries.isTopLayer(sourceLocation.layer.id)) {
+
+        if (
+            !this.queries.isTopLayer(
+                sourceLocation.layer.id
+            )
+        ) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.SOURCE_NOT_TOP
@@ -127,13 +237,19 @@ export default class MovementRules {
         }
 
         /*
-         * 4. Un Object bloqueado no puede moverse directamente.
+         * ========================================================
+         * 4. OBJECT BLOQUEADO
+         * ========================================================
          *
-         * Importante:
-         * MovementRules no impide que posteriormente TrioRules
-         * permita que ese Object participe en un trío.
+         * El bloqueo solamente impide mover directamente
+         * el Object.
+         *
+         * No impide que posteriormente pueda participar
+         * en un trío.
          */
+
         if (object.isBlocked()) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.OBJECT_BLOCKED
@@ -141,12 +257,16 @@ export default class MovementRules {
         }
 
         /*
-         * 5. Debe existir un destino.
+         * ========================================================
+         * 5. DESTINO EXISTENTE
+         * ========================================================
          */
+
         if (
             destinationSlotId === undefined ||
             destinationSlotId === null
         ) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.DESTINATION_NOT_FOUND
@@ -154,12 +274,18 @@ export default class MovementRules {
         }
 
         /*
-         * 6. Localizamos el destino dentro de la jerarquía lógica.
+         * ========================================================
+         * 6. UBICACIÓN LÓGICA DEL DESTINO
+         * ========================================================
          */
+
         const destinationLocation =
-            this.#getSlotLocation(destinationSlotId);
+            this.#getSlotLocation(
+                destinationSlotId
+            );
 
         if (!destinationLocation) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.DESTINATION_NOT_FOUND
@@ -176,12 +302,16 @@ export default class MovementRules {
             destinationLocation.structure.id;
 
         /*
-         * 7. Un Object no puede moverse a su propio Slot.
+         * ========================================================
+         * 7. MISMO SLOT
+         * ========================================================
          */
+
         if (
             destinationLocation.slot.id ===
             sourceLocation.slot.id
         ) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.SAME_SLOT
@@ -189,9 +319,23 @@ export default class MovementRules {
         }
 
         /*
-         * 8. La jerarquía del destino debe ser completa.
+         * ========================================================
+         * 8. JERARQUÍA DEL DESTINO
+         * ========================================================
+         *
+         * La ubicación debe estar completa.
+         *
+         * Structure
+         *    ↓
+         * Shelf
+         *    ↓
+         * Layer
+         *    ↓
+         * Slot
          */
+
         if (!destinationLocation.structure) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.DESTINATION_STRUCTURE_INVALID
@@ -199,6 +343,7 @@ export default class MovementRules {
         }
 
         if (!destinationLocation.shelf) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.DESTINATION_SHELF_INVALID
@@ -206,20 +351,33 @@ export default class MovementRules {
         }
 
         if (!destinationLocation.layer) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.DESTINATION_LAYER_INVALID
             );
         }
 
+        if (!destinationLocation.slot) {
+
+            return this.#invalid(
+                baseResult,
+                MovementRules.REASON.DESTINATION_NOT_FOUND
+            );
+        }
+
         /*
-         * 9. El destino debe pertenecer a una capa TOP.
+         * ========================================================
+         * 9. DESTINO TOP
+         * ========================================================
          */
+
         if (
             !this.queries.isTopLayer(
                 destinationLocation.layer.id
             )
         ) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.DESTINATION_NOT_TOP
@@ -227,9 +385,18 @@ export default class MovementRules {
         }
 
         /*
-         * 10. El destino debe estar vacío.
+         * ========================================================
+         * 10. DESTINO VACÍO
+         * ========================================================
+         *
+         * Los movimientos solamente pueden realizarse hacia
+         * huecos TOP vacíos.
          */
-        if (!destinationLocation.slot.isEmpty()) {
+
+        if (
+            !destinationLocation.slot.isEmpty()
+        ) {
+
             return this.#invalid(
                 baseResult,
                 MovementRules.REASON.DESTINATION_OCCUPIED
@@ -237,23 +404,38 @@ export default class MovementRules {
         }
 
         /*
-         * El movimiento lógico es válido.
+         * ========================================================
+         * MOVIMIENTO VÁLIDO
+         * ========================================================
          *
-         * No se modifica ningún dato del estado.
-         * La ejecución corresponderá posteriormente a MovementSystem.
+         * No se modifica absolutamente nada del estado.
+         *
+         * MovementSystem será responsable posteriormente
+         * de ejecutar el movimiento.
          */
+
         return {
+
             ...baseResult,
-            valid: true,
-            reason: MovementRules.REASON.VALID
+
+            valid:
+                true,
+
+            reason:
+                MovementRules.REASON.VALID
         };
     }
 
     /**
-     * Atajo para consumidores que solamente necesitan
-     * conocer si el movimiento es válido.
+     * Atajo booleano.
+     *
+     * Devuelve solamente si el movimiento es válido.
      */
-    canMove({ objectId, destinationSlotId } = {}) {
+    canMove({
+        objectId,
+        destinationSlotId
+    } = {}) {
+
         return this.validate({
             objectId,
             destinationSlotId
@@ -275,20 +457,36 @@ export default class MovementRules {
      * No se utilizan coordenadas físicas.
      */
     #getSlotLocation(slotId) {
-        const layer = this.queries.getLayerForSlot(slotId);
+
+        const layer =
+            this.queries.getLayerForSlot(
+                slotId
+            );
 
         if (!layer) {
             return null;
         }
 
-        const slot = layer.getSlotById(slotId);
+        const slot =
+            layer.getSlotById(
+                slotId
+            );
+
+        if (!slot) {
+            return null;
+        }
 
         const shelf =
-            this.queries.getShelfForLayer(layer.id);
+            this.queries.getShelfForLayer(
+                layer.id
+            );
 
-        const structure = shelf
-            ? this.queries.getStructureForShelf(shelf.id)
-            : null;
+        const structure =
+            shelf
+                ? this.queries.getStructureForShelf(
+                    shelf.id
+                )
+                : null;
 
         return {
             structure,
@@ -298,10 +496,22 @@ export default class MovementRules {
         };
     }
 
-    #invalid(result, reason) {
+    /**
+     * Construye un resultado inválido sin modificar
+     * el objeto base.
+     */
+    #invalid(
+        result,
+        reason
+    ) {
+
         return {
+
             ...result,
-            valid: false,
+
+            valid:
+                false,
+
             reason
         };
     }

@@ -26,7 +26,9 @@
  * La victoria tiene prioridad sobre el bloqueo.
  *
  * IMPORTANTE:
+ *
  * BlockDetectionRules NO duplica la lógica de movimiento.
+ *
  * Utiliza MovementRules como autoridad única para decidir
  * si un candidato constituye un movimiento válido.
  *
@@ -40,19 +42,28 @@ import MovementRules from "../movement/MovementRules.js";
 export default class BlockDetectionRules {
 
     static REASON = Object.freeze({
-        BLOCKED: "BLOCKED",
-        NOT_BLOCKED: "NOT_BLOCKED",
-        VICTORY: "VICTORY"
+
+        BLOCKED:
+            "BLOCKED",
+
+        NOT_BLOCKED:
+            "NOT_BLOCKED",
+
+        VICTORY:
+            "VICTORY"
     });
 
     constructor(levelState) {
+
         if (!levelState) {
+
             throw new Error(
                 "BlockDetectionRules: LevelState es obligatorio."
             );
         }
 
-        this.levelState = levelState;
+        this.levelState =
+            levelState;
 
         this.queries =
             new StateQueries(levelState);
@@ -67,6 +78,8 @@ export default class BlockDetectionRules {
 
     /**
      * Determina el estado de bloqueo actual.
+     *
+     * La victoria siempre tiene prioridad.
      *
      * @returns {{
      *   blocked: boolean,
@@ -83,66 +96,110 @@ export default class BlockDetectionRules {
             this.levelState.getObjectCount();
 
         /*
-         * La victoria tiene prioridad absoluta.
+         * ========================================================
+         * VICTORIA
+         * ========================================================
          *
-         * Si no quedan objetos, no estamos ante un bloqueo.
+         * Si no quedan Objects, no estamos ante un bloqueo.
          */
-        if (remainingObjects === 0) {
+
+        if (
+            remainingObjects === 0
+        ) {
+
             return {
-                blocked: false,
+
+                blocked:
+                    false,
+
                 reason:
                     BlockDetectionRules.REASON.VICTORY,
-                remainingObjects: 0,
-                movableObjectIds: [],
-                candidateDestinationSlotIds: [],
-                validMove: null
+
+                remainingObjects:
+                    0,
+
+                movableObjectIds:
+                    [],
+
+                candidateDestinationSlotIds:
+                    [],
+
+                validMove:
+                    null
             };
         }
 
         /*
-         * Obtenemos los Objects que podrían ser origen
-         * de un movimiento normal.
+         * ========================================================
+         * CANDIDATOS DE ORIGEN
+         * ========================================================
          */
+
         const movableObjectIds =
             this.#getNormalMovableObjectIds();
 
         /*
-         * Obtenemos los Slots que podrían ser destino.
+         * ========================================================
+         * CANDIDATOS DE DESTINO
+         * ========================================================
          */
+
         const candidateDestinationSlotIds =
             this.#getTopEmptySlotIds();
 
         /*
-         * Si no existe ningún Object que pueda moverse
-         * o ningún destino disponible, no puede existir
-         * un movimiento válido.
+         * ========================================================
+         * SIN CANDIDATOS
+         * ========================================================
+         *
+         * Si no existe Object normal movible o no existe
+         * ningún Slot TOP vacío, no puede existir un
+         * MOVE_OBJECT válido.
          */
+
         if (
             movableObjectIds.length === 0 ||
             candidateDestinationSlotIds.length === 0
         ) {
+
             return {
-                blocked: true,
+
+                blocked:
+                    true,
+
                 reason:
                     BlockDetectionRules.REASON.BLOCKED,
+
                 remainingObjects,
+
                 movableObjectIds,
+
                 candidateDestinationSlotIds,
-                validMove: null
+
+                validMove:
+                    null
             };
         }
 
         /*
-         * Probamos todas las combinaciones posibles de:
+         * ========================================================
+         * VALIDACIÓN REAL
+         * ========================================================
+         *
+         * Probamos todas las combinaciones:
          *
          *     Object TOP movible
-         *             +
+         *              +
          *     Slot TOP vacío
          *
-         * La decisión final NO se duplica aquí:
-         * se delega en MovementRules.
+         * La decisión final pertenece exclusivamente
+         * a MovementRules.
          */
-        for (const objectId of movableObjectIds) {
+
+        for (
+            const objectId
+            of movableObjectIds
+        ) {
 
             for (
                 const destinationSlotId
@@ -151,37 +208,62 @@ export default class BlockDetectionRules {
 
                 const result =
                     this.movementRules.validate({
+
                         objectId,
+
                         destinationSlotId
                     });
 
-                if (result.valid) {
+                if (
+                    result.valid
+                ) {
 
                     return {
-                        blocked: false,
+
+                        blocked:
+                            false,
+
                         reason:
                             BlockDetectionRules.REASON.NOT_BLOCKED,
+
                         remainingObjects,
+
                         movableObjectIds,
+
                         candidateDestinationSlotIds,
-                        validMove: result
+
+                        validMove:
+                            result
                     };
                 }
             }
         }
 
         /*
-         * Hemos agotado todos los candidatos y ninguno
-         * ha sido aceptado por MovementRules.
+         * ========================================================
+         * BLOQUEADO
+         * ========================================================
+         *
+         * Hemos probado todos los candidatos y MovementRules
+         * no ha aceptado ninguno.
          */
+
         return {
-            blocked: true,
+
+            blocked:
+                true,
+
             reason:
                 BlockDetectionRules.REASON.BLOCKED,
+
             remainingObjects,
+
             movableObjectIds,
+
             candidateDestinationSlotIds,
-            validMove: null
+
+            validMove:
+                null
         };
     }
 
@@ -189,13 +271,14 @@ export default class BlockDetectionRules {
      * Devuelve true si el nivel está bloqueado.
      */
     isBlocked() {
+
         return this.validate().blocked;
     }
 
     /**
      * Devuelve true si existe algún movimiento normal válido.
      *
-     * La victoria devuelve false porque no quedan objetos
+     * La victoria devuelve false porque no quedan Objects
      * que mover.
      */
     hasValidMove() {
@@ -219,6 +302,7 @@ export default class BlockDetectionRules {
      *   - el nivel está ganado.
      */
     getValidMove() {
+
         return this.validate().validMove;
     }
 
@@ -226,17 +310,20 @@ export default class BlockDetectionRules {
      * Devuelve los Objects que actualmente podrían ser
      * candidatos a origen de MOVE_OBJECT.
      *
-     * Condiciones previas:
+     * Condiciones:
      *
-     *   - Layer TOP
-     *   - Slot ocupado
-     *   - Object existente
-     *   - Object no bloqueado
-     *   - Object no REWARD
+     *   - Layer TOP;
+     *   - Slot ocupado;
+     *   - Object existente;
+     *   - Object no bloqueado;
+     *   - Object no REWARD.
+     *
+     * La última decisión de movimiento pertenece a MovementRules.
      */
     #getNormalMovableObjectIds() {
 
-        const ids = [];
+        const ids =
+            [];
 
         for (
             const structure
@@ -256,11 +343,13 @@ export default class BlockDetectionRules {
                     /*
                      * Solo TOP es interactiva.
                      */
+
                     if (
                         !this.queries.isTopLayer(
                             layer.id
                         )
                     ) {
+
                         continue;
                     }
 
@@ -269,7 +358,14 @@ export default class BlockDetectionRules {
                         of layer.slots
                     ) {
 
-                        if (slot.isEmpty()) {
+                        /*
+                         * Un Slot vacío no puede ser origen.
+                         */
+
+                        if (
+                            slot.isEmpty()
+                        ) {
+
                             continue;
                         }
 
@@ -277,6 +373,11 @@ export default class BlockDetectionRules {
                             this.queries.getObject(
                                 slot.objectId
                             );
+
+                        /*
+                         * Referencia inconsistente:
+                         * no puede ser candidato.
+                         */
 
                         if (!object) {
                             continue;
@@ -286,19 +387,29 @@ export default class BlockDetectionRules {
                          * REWARD no participa en MOVE_OBJECT
                          * normal.
                          */
-                        if (object.isReward()) {
+
+                        if (
+                            object.isReward()
+                        ) {
+
                             continue;
                         }
 
                         /*
-                         * Un Object bloqueado no puede
-                         * ser origen de movimiento.
+                         * Un Object bloqueado no puede ser
+                         * origen de movimiento.
                          */
-                        if (object.isBlocked()) {
+
+                        if (
+                            object.isBlocked()
+                        ) {
+
                             continue;
                         }
 
-                        ids.push(object.id);
+                        ids.push(
+                            object.id
+                        );
                     }
                 }
             }
@@ -313,7 +424,8 @@ export default class BlockDetectionRules {
      */
     #getTopEmptySlotIds() {
 
-        const ids = [];
+        const ids =
+            [];
 
         for (
             const structure
@@ -330,11 +442,16 @@ export default class BlockDetectionRules {
                     of shelf.layers
                 ) {
 
+                    /*
+                     * Solo TOP puede recibir Objects.
+                     */
+
                     if (
                         !this.queries.isTopLayer(
                             layer.id
                         )
                     ) {
+
                         continue;
                     }
 
@@ -343,8 +460,13 @@ export default class BlockDetectionRules {
                         of layer.slots
                     ) {
 
-                        if (slot.isEmpty()) {
-                            ids.push(slot.id);
+                        if (
+                            slot.isEmpty()
+                        ) {
+
+                            ids.push(
+                                slot.id
+                            );
                         }
                     }
                 }
